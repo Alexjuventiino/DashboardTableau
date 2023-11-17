@@ -1,5 +1,6 @@
 import streamlit as st
 import xml.etree.ElementTree as ET
+from io import BytesIO
 
 def calculer_nouvelles_valeurs(x, w, maxwidth, nouvelle_largeur):
     nouveau_x = x * (100000 / maxwidth) / (100000 / nouvelle_largeur)
@@ -36,7 +37,16 @@ def main():
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
 
     if xml_path:
-        st.sidebar.button("Modifier", on_click=lambda: modifier_tableau_de_bord(xml_path, nouvelle_largeur, dashboard_name))
+        if st.sidebar.button("Modifier"):
+            fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, dashboard_name)
+
+            # Télécharger le fichier modifié
+            st.download_button(
+                label="Télécharger le fichier modifié",
+                data=BytesIO(open(fichier_modifie, 'rb').read()),
+                file_name=fichier_modifie,
+                key="download_button"
+            )
 
 if __name__ == "__main__":
     main()
