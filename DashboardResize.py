@@ -36,7 +36,7 @@ def main():
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
 
     if xml_path:
-        st.sidebar.button("Modifier", on_click=lambda: modifier(xml_path, nouvelle_largeur, dashboard_name))
+        st.sidebar.button("Modifier", on_click=lambda: modifier_tableau_de_bord(xml_path, nouvelle_largeur, dashboard_name))
 
 if __name__ == "__main__":
     main()
