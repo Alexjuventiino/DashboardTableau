@@ -32,8 +32,8 @@ def main():
     st.title("Modification de Tableau de Bord")
 
     # Sidebar
-    nouvelle_largeur = st.sidebar.text_input("Nouvelle largeur du Tableau de Bord","")
-    dashboard_name = st.sidebar.text_input("Nom du Tableau de Bord", "Tableau de bord 2")
+    dashboard_name = st.sidebar.text_input("Nom du Tableau de Bord", placeholder="Ex: Overview")
+    nouvelle_largeur = st.sidebar.text_input("Nouvelle largeur du Tableau de Bord",placeholder="Ex:1600")
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
 
     if xml_path:
