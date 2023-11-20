@@ -3,8 +3,8 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 
 def calculer_nouvelles_valeurs(x, w, maxwidth, nouvelle_largeur):
-    nouveau_x = x * (100000 / maxwidth) / (100000 / nouvelle_largeur)
-    nouveau_w = w * (100000 / maxwidth) / (100000 / nouvelle_largeur)
+    nouveau_x = x / (100000 / maxwidth) * (100000 / nouvelle_largeur)
+    nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
     return int(nouveau_x), int(nouveau_w)
 
 def modifier_tableau_de_bord(xml_path, nouvelle_largeur, dashboard_name):
