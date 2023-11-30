@@ -46,7 +46,7 @@ def main():
     st.title("Modification de Tableau de Bord")
     # Sidebar
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
-    if xml_path :
+    if xml_path:
         dashboards = recuperer_noms_dashboards(xml_path)
         dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
         st.write('You selected:', dashboard_a_modifier)
