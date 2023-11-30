@@ -46,11 +46,11 @@ def main():
     st.title("Modification de Tableau de Bord")
     # Sidebar
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
+    st.write(ET.parse(xml_path))
     if xml_path:
         dashboards = recuperer_noms_dashboards(xml_path)
         dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
         st.write('You selected:', dashboard_a_modifier)
-        st.write(ET.parse(xml_path))
         nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
