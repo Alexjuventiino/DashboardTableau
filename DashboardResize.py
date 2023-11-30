@@ -27,16 +27,16 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             size.set("maxheight", str(nouvelle_hauteur))
             size.set("minheight", str(nouvelle_hauteur))
 
-            for zone in dashboard.findall(".//zone"):
-                x = int(zone.get("x", 0))
-                w = int(zone.get("w", 0))
-                y = int(zone.get("y", 0))
-                h = int(zone.get("h", 0))
-                nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur)
-                zone.set("x", str(nouveau_x))
-                zone.set("w", str(nouveau_w))
-                zone.set("y", str(nouveau_y))
-                zone.set("h", str(nouveau_h))
+        for zone in dashboard.findall(".//zone"):
+            x = int(zone.get("x", 0))
+            w = int(zone.get("w", 0))
+            y = int(zone.get("y", 0))
+             h = int(zone.get("h", 0))
+            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur)
+            zone.set("x", str(nouveau_x))
+            zone.set("w", str(nouveau_w))
+            zone.set("y", str(nouveau_y))
+            zone.set("h", str(nouveau_h))
 
     nouveau_nom_fichier = "nouveau_fichier.twb"
     tree.write(nouveau_nom_fichier)
