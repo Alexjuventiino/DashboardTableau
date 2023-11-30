@@ -49,8 +49,13 @@ def main():
 
     # Sidebar
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
+    if xml_path is not None:
+        try:
+            tree = ET.parse(xml_path)
+        except ET.ParseError as e:
+            st.sidebar.error(f"Erreur lors de l'analyse du fichier XML : {e}")
+            return
 
-    if xml_path:
         dashboards = recuperer_noms_dashboards(xml_path)
         dashboards_a_modifier = st.sidebar.multiselect("Dashboards à modifier", dashboards)
         nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
