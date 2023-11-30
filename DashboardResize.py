@@ -2,11 +2,6 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 from io import BytesIO
 
-def recuperer_noms_dashboards(xml_path):
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-    return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
-
 def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur):
     nouveau_x = x / (100000 / maxwidth) * (100000 / nouvelle_largeur)
     nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
@@ -15,11 +10,7 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur
     return int(nouveau_x), int(nouveau_w), int(nouveau_y), int(nouveau_h)
 
 def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name):
-
-    xml_content = xml_path.read()
-    st.text(f"Contenu du fichier XML :\n{xml_content}")    
-    xml_bytes = BytesIO(xml_content)
-    tree = ET.parse(xml_bytes)
+    tree = ET.parse(xml_path)
     root = tree.getroot()
 
     for dashboard in root.findall(".//dashboard[@name='"+dashboard_name+"']"):
@@ -50,11 +41,10 @@ def main():
     st.title("Modification de Tableau de Bord")
 
     # Sidebar
+    dashboard_name = st.sidebar.text_input("Nom du Tableau de Bord", placeholder="Ex: Overview")
     nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord",placeholder="Ex:1600",min_value=1, max_value=3000, value=None, step=1)
     nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord",placeholder="Ex:1800",min_value=1, max_value=6000, value=None, step=1)
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
-    dashboards = recuperer_noms_dashboards(xml_path)
-    dashboard_name = st.sidebar.selectbox("Dashboards à modifier", dashboards)
 
     if xml_path:
         if st.sidebar.button("Modifier"):
