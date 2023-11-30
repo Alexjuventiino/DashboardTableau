@@ -18,16 +18,14 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
-    for dashboard in root.findall(".//dashboard"):
-        dashboard_name = dashboard.get("name")
-        if dashboard_name in dashboards_a_modifier:
-            for size in dashboard.findall(".//size"):
-                maxwidth = float(size.get("maxwidth", 1.0))
-                size.set("maxwidth", str(nouvelle_largeur))
-                size.set("minwidth", str(nouvelle_largeur))
-                maxheight = float(size.get("maxheight", 1.0))
-                size.set("maxheight", str(nouvelle_hauteur))
-                size.set("minheight", str(nouvelle_hauteur))
+    for dashboard in root.findall(".//dashboard[@name='"+dashboards_a_modifier+"']"):
+        for size in dashboard.findall(".//size"):
+            maxwidth = float(size.get("maxwidth", 1.0))
+            size.set("maxwidth", str(nouvelle_largeur))
+            size.set("minwidth", str(nouvelle_largeur))
+            maxheight = float(size.get("maxheight", 1.0))
+            size.set("maxheight", str(nouvelle_hauteur))
+            size.set("minheight", str(nouvelle_hauteur))
 
             for zone in dashboard.findall(".//zone"):
                 x = int(zone.get("x", 0))
@@ -52,13 +50,12 @@ def main():
     if xml_path :
         dashboards = recuperer_noms_dashboards(xml_path)
         dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
+        st.write('You selected:', dashboard_a_modifier)
         nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
         if st.sidebar.button("Modifier"):
-            st.write(dashboard_a_modifier)
             fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
-
             # Télécharger le fichier modifié
             st.download_button(
                 label="Télécharger le fichier modifié",
