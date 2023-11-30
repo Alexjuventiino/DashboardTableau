@@ -31,7 +31,7 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             x = int(zone.get("x", 0))
             w = int(zone.get("w", 0))
             y = int(zone.get("y", 0))
-             h = int(zone.get("h", 0))
+            h = int(zone.get("h", 0))
             nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur)
             zone.set("x", str(nouveau_x))
             zone.set("w", str(nouveau_w))
