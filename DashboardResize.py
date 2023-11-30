@@ -2,6 +2,11 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 from io import BytesIO
 
+def recuperer_noms_dashboards(xml_path):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
+
 def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur):
     nouveau_x = x / (100000 / maxwidth) * (100000 / nouvelle_largeur)
     nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
