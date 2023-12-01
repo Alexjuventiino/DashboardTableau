@@ -46,7 +46,8 @@ def main():
     st.title("Modification de Tableau de Bord")
     # Sidebar
     xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
-    if xml_path:
+
+    if xml_path is not None and xml_path.name.endswith('.twb'):
         dashboards = recuperer_noms_dashboards(xml_path)
         dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
         nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
@@ -55,12 +56,13 @@ def main():
         if st.sidebar.button("Modifier"):
             fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
             # Télécharger le fichier modifié
-            st.download_button(
-                label="Télécharger le fichier modifié",
-                data=BytesIO(open(fichier_modifie, 'rb').read()),
-                file_name=fichier_modifie,
-                key="download_button"
-            )
+            with open(fichier_modifie, 'rb') as file:
+                st.download_button(
+                    label="Télécharger le fichier modifié",
+                    data=BytesIO(file.read()),
+                    file_name=fichier_modifie,
+                    key="download_button"
+                )
 
 if __name__ == "__main__":
     main()
