@@ -45,15 +45,15 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
 def main():
     st.title("Modification de Tableau de Bord")
     # Sidebar
-    xml_file = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
+    xml_file = st.file_uploader("Uploader le fichier .twb", type=["twb"])
 
     if xml_file is not None and xml_file.name.endswith('.twb'):
         xml_content = xml_file.read()  # Stocker le contenu du fichier
 
         dashboards = recuperer_noms_dashboards(BytesIO(xml_content))  # Utiliser BytesIO pour créer un flux à partir du contenu
-        dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
-        nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
-        nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
+        dashboard_a_modifier = st.selectbox("Dashboards à modifier", dashboards)
+        nouvelle_largeur = st.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
+        nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
         if st.sidebar.button("Modifier"):
             fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
