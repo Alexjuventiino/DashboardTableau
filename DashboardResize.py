@@ -55,7 +55,7 @@ def main():
         nouvelle_largeur = st.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
-        if st.sidebar.button("Modifier"):
+        if st.button("Modifier"):
             fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
             # Télécharger le fichier modifié
             st.download_button(
