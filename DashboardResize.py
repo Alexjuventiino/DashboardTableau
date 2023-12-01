@@ -45,24 +45,25 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
 def main():
     st.title("Modification de Tableau de Bord")
     # Sidebar
-    xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
+    xml_file = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
 
-    if xml_path is not None and xml_path.name.endswith('.twb'):
-        dashboards = recuperer_noms_dashboards(xml_path)
+    if xml_file is not None and xml_file.name.endswith('.twb'):
+        xml_content = xml_file.read()  # Stocker le contenu du fichier
+
+        dashboards = recuperer_noms_dashboards(BytesIO(xml_content))  # Utiliser BytesIO pour créer un flux à partir du contenu
         dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
         nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
         if st.sidebar.button("Modifier"):
-            fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
+            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
             # Télécharger le fichier modifié
-            with open(fichier_modifie, 'rb') as file:
-                st.download_button(
-                    label="Télécharger le fichier modifié",
-                    data=BytesIO(file.read()),
-                    file_name=fichier_modifie,
-                    key="download_button"
-                )
+            st.download_button(
+                label="Télécharger le fichier modifié",
+                data=BytesIO(open(fichier_modifie, 'rb').read()),
+                file_name=fichier_modifie,
+                key="download_button"
+            )
 
 if __name__ == "__main__":
     main()
