@@ -44,20 +44,18 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
 
 def main():
     st.title("Modification de Tableau de Bord")
-
     # Sidebar
-    dashboard_name = st.sidebar.text_input("Nom du Tableau de Bord", placeholder="Ex: Overview")
-    nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord",placeholder="Ex:1600",min_value=1, max_value=3000, value=None, step=1)
-    nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord",placeholder="Ex:1800",min_value=1, max_value=6000, value=None, step=1)
-    xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"], key="file_upload_widget")
-    myfile = st.session_state.file_upload_widget
-    dashboards = recuperer_noms_dashboards(myfile)
-    st.write(ET.parse(myfile))
-
+    xml_path = st.sidebar.file_uploader("Uploader le fichier .twb", type=["twb"])
+    st.write(ET.parse(xml_path))
     if xml_path:
-        if st.sidebar.button("Modifier"):
-            fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name)
+        dashboards = recuperer_noms_dashboards(xml_path)
+        dashboard_a_modifier = st.sidebar.selectbox("Dashboards à modifier", dashboards)
+        st.write('You selected:', dashboard_a_modifier)
+        nouvelle_largeur = st.sidebar.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
+        nouvelle_hauteur = st.sidebar.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
 
+        if st.sidebar.button("Modifier"):
+            fichier_modifie = modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier)
             # Télécharger le fichier modifié
             st.download_button(
                 label="Télécharger le fichier modifié",
