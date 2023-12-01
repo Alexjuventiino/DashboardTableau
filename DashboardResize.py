@@ -19,7 +19,7 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
     root = tree.getroot()
 
     for dashboard in root.findall(".//dashboard[@name='"+dashboard_name+"']"):
-        for size in dashboard.findall(".//size"):
+        for size in dashboard.findall("./size"):
             maxwidth = float(size.get("maxwidth", 1.0))
             size.set("maxwidth", str(nouvelle_largeur))
             size.set("minwidth", str(nouvelle_largeur))
