@@ -8,12 +8,12 @@ def recuperer_noms_dashboards(xml_path):
     return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
 
 def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer):
-    if deplacer == "largeur":
+    if deplacer == "Largeur":
         nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
         nouveau_y = y
         nouveau_h = h
-    elif deplacer == "hauteur":
+    elif deplacer == "Hauteur":
         nouveau_x = x
         nouveau_w = w
         nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
