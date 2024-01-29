@@ -70,11 +70,11 @@ def main():
         with col1: 
             nouvelle_largeur = st.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         with col3: 
-            deplacer_droite=sac.switch(label='déplacer', description='déplacer les objects vers la droite', align='center', size='xs', position='left', key='1')
+            deplacer_droite=sac.switch(label='déplacer', description='déplacer les objects vers la droite', value='False', align='center', size='xs', position='left', key='1')
         with col2:
             nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
         with col4: 
-            deplacer_bas=sac.switch(label='déplacer', description='déplacer les objects vers le bas', align='center', size='xs', position='left', key='2')
+            deplacer_bas=sac.switch(label='déplacer', description='déplacer les objects vers le bas', value='False', align='center', size='xs', position='left', key='2')
         
         # Ajout de l'option pour choisir la méthode de déplacement
         deplacer = st.radio("Méthode de déplacement", ["Aucun", "Largeur", "Hauteur"])
