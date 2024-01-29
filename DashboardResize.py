@@ -65,12 +65,13 @@ def main():
 
         dashboards = recuperer_noms_dashboards(BytesIO(xml_content))  # Utiliser BytesIO pour créer un flux à partir du contenu
         dashboard_a_modifier = st.selectbox("Dashboards à modifier", dashboards)
-        col1, col2, col3, col4 = st.columns([1,1,1,1])
+        col1, col2 = st.columns([1,1])
+        col3, col4 = st.columns([1,1])
         with col1: 
             nouvelle_largeur = st.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
-        with col2: 
+        with col3: 
             sac.switch(label='déplacer', align='center', size='md', key='1')
-        with col3:
+        with col2:
             nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
         with col4: 
             sac.switch(label='déplacer', align='center', size='md', key='2')
