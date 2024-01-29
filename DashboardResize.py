@@ -27,7 +27,7 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur
 
     return int(nouveau_x), int(nouveau_w), int(nouveau_y), int(nouveau_h)
 
-def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer):
+def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer,deplacer_droite,deplacer_bas):
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
