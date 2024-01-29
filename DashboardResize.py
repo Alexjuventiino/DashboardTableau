@@ -8,7 +8,7 @@ def recuperer_noms_dashboards(xml_path):
     root = tree.getroot()
     return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
 
-def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer,deplacer_droite,deplacer_bas):
+def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer_droite, deplacer_bas):
     if deplacer_droite == True and deplacer_bas==False:
         nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
@@ -19,6 +19,11 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur
         nouveau_w = w
         nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
         nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
+    elif deplacer_bas == True and deplacer_droite==True:
+        nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
+        nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
+        nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
+        nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
     else:
         nouveau_x = x / (100000 / maxwidth) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
@@ -27,7 +32,7 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur
 
     return int(nouveau_x), int(nouveau_w), int(nouveau_y), int(nouveau_h)
 
-def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer,deplacer_droite,deplacer_bas):
+def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer_droite,deplacer_bas):
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
@@ -45,7 +50,7 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             w = int(zone.get("w", 0))
             y = int(zone.get("y", 0))
             h = int(zone.get("h", 0))
-            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer,deplacer_droite,deplacer_bas)
+            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer_droite,deplacer_bas)
             zone.set("x", str(nouveau_x))
             zone.set("w", str(nouveau_w))
             zone.set("y", str(nouveau_y))
@@ -75,15 +80,12 @@ def main():
             nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
         with col4: 
             deplacer_bas=sac.switch(label='déplacer', description='déplacer les objects vers le bas', value=False, align='center', size='xs', position='left', key='2')
-        
-        # Ajout de l'option pour choisir la méthode de déplacement
-        deplacer = st.radio("Méthode de déplacement", ["Aucun", "Largeur", "Hauteur"])
 
         if st.button("Modifier"):
-            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer,deplacer_droite,deplacer_bas)
+            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer_droite,deplacer_bas)
             # Télécharger le fichier modifié
             st.download_button(
-                label="Télécharger le fichier modifié",
+                label="Télécharger le fichier modifié", 
                 data=BytesIO(open(fichier_modifie, 'rb').read()),
                 file_name=fichier_modifie,
                 key="download_button"
