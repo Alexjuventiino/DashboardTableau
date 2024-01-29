@@ -1,4 +1,4 @@
-import streamlit as st
+cer_import streamlit as st
 import streamlit_antd_components as sac
 import xml.etree.ElementTree as ET
 from io import BytesIO
@@ -8,13 +8,13 @@ def recuperer_noms_dashboards(xml_path):
     root = tree.getroot()
     return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
 
-def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer):
-    if deplacer == "Largeur":
+def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer,deplacer_droite,deplacer_bas):
+    if deplacer_droite == True and deplacer_bas==False:
         nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
         nouveau_y = y
         nouveau_h = h
-    elif deplacer == "Hauteur":
+    elif deplacer_bas == True and deplacer_droite==False:
         nouveau_x = x
         nouveau_w = w
         nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
@@ -45,7 +45,7 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             w = int(zone.get("w", 0))
             y = int(zone.get("y", 0))
             h = int(zone.get("h", 0))
-            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer)
+            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer,deplacer_droite,deplacer_bas)
             zone.set("x", str(nouveau_x))
             zone.set("w", str(nouveau_w))
             zone.set("y", str(nouveau_y))
@@ -70,17 +70,17 @@ def main():
         with col1: 
             nouvelle_largeur = st.number_input("Nouvelle largeur du Tableau de Bord", placeholder="Ex:1600", min_value=1, max_value=3000, value=None, step=1)
         with col3: 
-            sac.switch(label='déplacer', description='déplacer les objects vers la droite', align='center', size='xs', position='left', key='1')
+            deplacer_droite=sac.switch(label='déplacer', description='déplacer les objects vers la droite', align='center', size='xs', position='left', key='1')
         with col2:
             nouvelle_hauteur = st.number_input("Nouvelle hauteur du Tableau de Bord", placeholder="Ex:1800", min_value=1, max_value=6000, value=None, step=1)
         with col4: 
-            sac.switch(label='déplacer', description='déplacer les objects vers le bas', align='center', size='xs', position='left', key='2')
+            deplacer_bas=sac.switch(label='déplacer', description='déplacer les objects vers le bas', align='center', size='xs', position='left', key='2')
         
         # Ajout de l'option pour choisir la méthode de déplacement
         deplacer = st.radio("Méthode de déplacement", ["Aucun", "Largeur", "Hauteur"])
 
         if st.button("Modifier"):
-            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer)
+            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer,deplacer_droite,deplacer_bas)
             # Télécharger le fichier modifié
             st.download_button(
                 label="Télécharger le fichier modifié",
