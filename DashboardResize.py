@@ -56,9 +56,12 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             zone.set("y", str(nouveau_y))
             zone.set("h", str(nouveau_h))
             
-    nouveau_nom_fichier = "nouveau_fichier.twb"
-    tree.write(nouveau_nom_fichier)
-    return nouveau_nom_fichier
+    #nouveau_nom_fichier = "nouveau_fichier.twb"
+    #tree.write(nouveau_nom_fichier)
+    #return nouveau_nom_fichier
+    out = BytesIO()
+    tree.write(out, encoding="utf-8", xml_declaration=True)
+    return out.getvalue()
 
 def main():
     st.title("Modification de Tableau de Bord")
@@ -81,14 +84,28 @@ def main():
         with col4: 
             deplacer_bas=sac.switch(label='déplacer', description='déplacer les objects vers le bas', value=False, align='center', size='xs', position='left', key='2')
 
-        if st.button("Modifier"):
-            fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer_droite,deplacer_bas)
+        #if st.button("Modifier"):
+            #fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer_droite,deplacer_bas)
             # Télécharger le fichier modifié
+            #st.download_button(
+                #label="Télécharger le fichier modifié", 
+                #data=BytesIO(open(fichier_modifie, 'rb').read()),
+                #file_name=fichier_modifie,
+                #key="download_button"
+            #)
+        if st.button("Modifier"):
+        if nouvelle_largeur is None or nouvelle_hauteur is None:
+            st.error("Renseigne largeur et hauteur.")
+        else:
+            twb_bytes = modifier_tableau_de_bord(
+                xml_content, nouvelle_largeur, nouvelle_hauteur,
+                dashboard_a_modifier, deplacer_droite, deplacer_bas
+            )
             st.download_button(
-                label="Télécharger le fichier modifié", 
-                data=BytesIO(open(fichier_modifie, 'rb').read()),
-                file_name=fichier_modifie,
-                key="download_button"
+                label="Télécharger le fichier modifié",
+                data=twb_bytes,
+                file_name="nouveau_fichier.twb",
+                mime="application/xml",
             )
 
 if __name__ == "__main__":
