@@ -94,19 +94,19 @@ def main():
                 #key="download_button"
             #)
         if st.button("Modifier"):
-        if nouvelle_largeur is None or nouvelle_hauteur is None:
-            st.error("Renseigne largeur et hauteur.")
-        else:
-            twb_bytes = modifier_tableau_de_bord(
-                xml_content, nouvelle_largeur, nouvelle_hauteur,
-                dashboard_a_modifier, deplacer_droite, deplacer_bas
-            )
-            st.download_button(
-                label="Télécharger le fichier modifié",
-                data=twb_bytes,
-                file_name="nouveau_fichier.twb",
-                mime="application/xml",
-            )
+            if nouvelle_largeur is None or nouvelle_hauteur is None:
+                st.error("Renseigne largeur et hauteur.")
+            else:
+                twb_bytes = modifier_tableau_de_bord(
+                    xml_content, nouvelle_largeur, nouvelle_hauteur,
+                    dashboard_a_modifier, deplacer_droite, deplacer_bas
+                )
+                st.download_button(
+                    label="Télécharger le fichier modifié",
+                    data=twb_bytes,
+                    file_name="nouveau_fichier.twb",
+                    mime="application/xml",
+                )
 
 if __name__ == "__main__":
     main()
