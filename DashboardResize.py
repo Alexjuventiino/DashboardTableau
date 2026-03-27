@@ -3,15 +3,50 @@ import streamlit_antd_components as sac
 import xml.etree.ElementTree as ET
 from io import BytesIO
 import pandas as pd
+import zipfile
+import tempfile
+import os
 
 
 # ─────────────────────────────────────────────
-# Parsing
+# #9 — Extraction .twbx (ZIP → .twb)
 # ─────────────────────────────────────────────
 
-def recuperer_dashboards_avec_tailles(xml_content):
-    """Retourne une liste de dicts {name, width, height} pour chaque dashboard."""
-    tree = ET.parse(xml_content)
+def extraire_twb_depuis_twbx(file_bytes: bytes) -> bytes:
+    """Extrait le fichier .twb contenu dans un .twbx (archive ZIP)."""
+    with zipfile.ZipFile(BytesIO(file_bytes)) as z:
+        twb_names = [n for n in z.namelist() if n.endswith(".twb")]
+        if not twb_names:
+            raise ValueError("Aucun fichier .twb trouvé dans l'archive .twbx.")
+        with z.open(twb_names[0]) as f:
+            return f.read()
+
+
+def charger_contenu_xml(uploaded_file) -> bytes:
+    """
+    Charge le contenu XML depuis un .twb ou .twbx.
+    Lève une ValueError si le format n'est pas reconnu.
+    """
+    raw = uploaded_file.read()
+    if uploaded_file.name.endswith(".twbx"):
+        return extraire_twb_depuis_twbx(raw)
+    return raw
+
+
+# ─────────────────────────────────────────────
+# #10 — Parsing avec validation XML
+# ─────────────────────────────────────────────
+
+def recuperer_dashboards_avec_tailles(xml_content: bytes):
+    """
+    Parse le XML et retourne une liste de dicts {name, width, height}.
+    Lève une ValueError explicite si le XML est malformé.
+    """
+    try:
+        tree = ET.parse(BytesIO(xml_content))
+    except ET.ParseError as e:
+        raise ValueError(f"Le fichier XML est malformé et ne peut pas être lu : {e}")
+
     root = tree.getroot()
     dashboards = []
     for dashboard in root.findall(".//dashboard"):
@@ -65,13 +100,17 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight,
 # Modification (batch)
 # ─────────────────────────────────────────────
 
-def modifier_tableaux_de_bord(xml_content, modifications: dict,
-                               deplacer_droite: bool, deplacer_bas: bool):
+def modifier_tableaux_de_bord(xml_content: bytes, modifications: dict,
+                               deplacer_droite: bool, deplacer_bas: bool) -> BytesIO:
     """
     modifications: {dashboard_name: (nouvelle_largeur, nouvelle_hauteur)}
     Traite tous les dashboards sélectionnés en une seule passe XML.
     """
-    tree = ET.parse(xml_content)
+    try:
+        tree = ET.parse(BytesIO(xml_content))
+    except ET.ParseError as e:
+        raise ValueError(f"Erreur de lecture XML lors de la modification : {e}")
+
     root = tree.getroot()
 
     for dashboard in root.findall(".//dashboard"):
@@ -80,11 +119,8 @@ def modifier_tableaux_de_bord(xml_content, modifications: dict,
             continue
 
         nouvelle_largeur, nouvelle_hauteur = modifications[name]
-
-        # Valeurs par défaut si aucune balise <size> n'est présente
         maxwidth, maxheight = float(nouvelle_largeur), float(nouvelle_hauteur)
 
-        # Mettre à jour la taille du dashboard
         for size in dashboard.findall("./size"):
             maxwidth  = float(size.get("maxwidth")  or 1.0)
             maxheight = float(size.get("maxheight") or 1.0)
@@ -93,7 +129,6 @@ def modifier_tableaux_de_bord(xml_content, modifications: dict,
             size.set("maxheight", str(nouvelle_hauteur))
             size.set("minheight", str(nouvelle_hauteur))
 
-        # Recalculer les zones
         for zone in dashboard.findall(".//zone"):
             x = int(zone.get("x", 0))
             w = int(zone.get("w", 0))
@@ -122,33 +157,77 @@ def modifier_tableaux_de_bord(xml_content, modifications: dict,
 def main():
     st.title("Modification de Tableau de Bord")
 
-    xml_file = st.file_uploader("Uploader le fichier .twb", type=["twb"])
+    # #9 — Accepter .twb et .twbx
+    xml_file = st.file_uploader("Uploader le fichier .twb ou .twbx", type=["twb", "twbx"])
 
-    if xml_file is None or not xml_file.name.endswith(".twb"):
+    if xml_file is None:
         return
 
-    xml_content = xml_file.read()
-    dashboards = recuperer_dashboards_avec_tailles(BytesIO(xml_content))
+    # #10 — Validation à l'upload
+    try:
+        xml_content = charger_contenu_xml(xml_file)
+        dashboards  = recuperer_dashboards_avec_tailles(xml_content)
+    except ValueError as e:
+        st.error(f"❌ Impossible de lire le fichier : {e}")
+        return
 
     if not dashboards:
         st.warning("Aucun dashboard trouvé dans ce fichier.")
         return
 
+    # ── #1 — Appliquer à tous ────────────────────────────────────────
+    st.subheader("Appliquer à tous les dashboards cochés")
+    col_a, col_b, col_c = st.columns([1, 1, 1])
+    with col_a:
+        largeur_globale = st.number_input(
+            "Largeur commune", min_value=1, max_value=3000, value=None,
+            step=1, placeholder="Ex : 1600", key="global_w"
+        )
+    with col_b:
+        hauteur_globale = st.number_input(
+            "Hauteur commune", min_value=1, max_value=6000, value=None,
+            step=1, placeholder="Ex : 1050", key="global_h"
+        )
+    with col_c:
+        st.write("")  # alignement vertical
+        st.write("")
+        appliquer_a_tous = st.button("↓ Appliquer à tous", use_container_width=True)
+
     # ── Tableau éditeur ──────────────────────────────────────────────
-    st.subheader("Dashboards à modifier")
+    st.subheader("Dashboards")
     st.caption("Cochez les dashboards à modifier et renseignez les nouvelles dimensions.")
 
-    df = pd.DataFrame([
-        {
-            "Modifier": False,
-            "Dashboard": d["name"],
-            "Largeur actuelle": d["width"],
-            "Hauteur actuelle": d["height"],
-            "Nouvelle largeur": None,
-            "Nouvelle hauteur": None,
-        }
-        for d in dashboards
-    ])
+    # Initialiser ou mettre à jour le dataframe en session_state
+    if "df_dashboards" not in st.session_state or st.session_state.get("fichier_actuel") != xml_file.name:
+        st.session_state["df_dashboards"] = pd.DataFrame([
+            {
+                "Modifier": False,
+                "Dashboard": d["name"],
+                "Largeur actuelle": d["width"],
+                "Hauteur actuelle": d["height"],
+                "Nouvelle largeur": None,
+                "Nouvelle hauteur": None,
+            }
+            for d in dashboards
+        ])
+        st.session_state["fichier_actuel"] = xml_file.name
+
+    df = st.session_state["df_dashboards"].copy()
+
+    # Appliquer les dimensions globales aux lignes cochées
+    if appliquer_a_tous:
+        if largeur_globale is None and hauteur_globale is None:
+            st.warning("Renseigne au moins une dimension commune avant d'appliquer.")
+        else:
+            mask_coches = df["Modifier"] == True
+            if not mask_coches.any():
+                # Si rien n'est coché, appliquer à tout le monde
+                mask_coches = pd.Series([True] * len(df))
+            if largeur_globale is not None:
+                df.loc[mask_coches, "Nouvelle largeur"] = float(largeur_globale)
+            if hauteur_globale is not None:
+                df.loc[mask_coches, "Nouvelle hauteur"] = float(hauteur_globale)
+            st.session_state["df_dashboards"] = df
 
     edited_df = st.data_editor(
         df,
@@ -166,7 +245,11 @@ def main():
         },
         hide_index=True,
         use_container_width=True,
+        key="data_editor"
     )
+
+    # Synchroniser les éditions manuelles dans session_state
+    st.session_state["df_dashboards"] = edited_df
 
     # ── Options globales (toggles) ───────────────────────────────────
     st.divider()
@@ -184,21 +267,25 @@ def main():
             value=False, align="start", size="xs", position="left", key="toggle_bas"
         )
 
-    # ── Action ──────────────────────────────────────────────────────
-    if st.button("Modifier", type="primary"):
+    # ── #8 — Bouton désactivé si aucune ligne cochée ─────────────────
+    nb_coches = int(edited_df["Modifier"].sum())
+    bouton_desactive = nb_coches == 0
+
+    st.write("")
+    if st.button(
+        f"Modifier ({nb_coches} dashboard{'s' if nb_coches > 1 else ''} sélectionné{'s' if nb_coches > 1 else ''})",
+        type="primary",
+        disabled=bouton_desactive,
+    ):
         selection = edited_df[edited_df["Modifier"]]
 
-        if selection.empty:
-            st.warning("Sélectionne au moins un dashboard.")
-            return
-
-        # Validation : toutes les lignes sélectionnées ont des dimensions
+        # Validation : dimensions renseignées pour toutes les lignes cochées
         lignes_incompletes = selection[
             selection["Nouvelle largeur"].isna() | selection["Nouvelle hauteur"].isna()
         ]
         if not lignes_incompletes.empty:
             noms = ", ".join(lignes_incompletes["Dashboard"].tolist())
-            st.error(f"Dimensions manquantes pour : {noms}")
+            st.error(f"Dimensions manquantes pour : **{noms}**")
             return
 
         modifications = {
@@ -208,14 +295,14 @@ def main():
 
         try:
             fichier_modifie = modifier_tableaux_de_bord(
-                BytesIO(xml_content), modifications, deplacer_droite, deplacer_bas
+                xml_content, modifications, deplacer_droite, deplacer_bas
             )
-            nb = len(modifications)
-            st.success(f"{nb} dashboard(s) modifié(s) avec succès.")
+            st.success(f"✅ {nb_coches} dashboard(s) modifié(s) avec succès.")
+            nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
             st.download_button(
                 label="⬇️ Télécharger le fichier modifié",
                 data=fichier_modifie,
-                file_name=f"{xml_file.name.replace('.twb', '')}_modifié.twb",
+                file_name=f"{nom_base}_modifié.twb",
                 mime="application/xml",
             )
         except ValueError as e:
