@@ -173,10 +173,24 @@ def recuperer_filtres(xml_content: bytes) -> list:
     tree = parser_xml(xml_content)
     root = tree.getroot()
     filtres = []
+    vus = set()  # (dashboard_name, zone_id) déjà traités
 
     for dashboard in root.findall(".//dashboard"):
+        # Exclure les layouts alternatifs (phone, tablet...) générés par Tableau
+        # Ces éléments ont un attribut "type" non vide ("phone", "tablet", etc.)
+        if dashboard.get("type"):
+            continue
+
         dashboard_name = dashboard.get("name")
         for zone in dashboard.findall(".//zone[@type-v2='filter']"):
+            zone_id = zone.get("id")
+            cle = (dashboard_name, zone_id)
+
+            # Ignorer les zones déjà vues (duplications structurelles dans le XML)
+            if cle in vus:
+                continue
+            vus.add(cle)
+
             param      = zone.get("param", "")
             mode_xml   = zone.get("mode", "")
             show_apply = zone.get("show-apply", "") == "true"
@@ -184,7 +198,7 @@ def recuperer_filtres(xml_content: bytes) -> list:
             mode_label = MODES.get(mode_xml, mode_xml)
 
             filtres.append({
-                "zone_id":     zone.get("id"),
+                "zone_id":     zone_id,
                 "dashboard":   dashboard_name,
                 "champ":       champ,
                 "param":       param,
