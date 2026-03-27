@@ -81,6 +81,9 @@ def modifier_tableaux_de_bord(xml_content, modifications: dict,
 
         nouvelle_largeur, nouvelle_hauteur = modifications[name]
 
+        # Valeurs par défaut si aucune balise <size> n'est présente
+        maxwidth, maxheight = float(nouvelle_largeur), float(nouvelle_hauteur)
+
         # Mettre à jour la taille du dashboard
         for size in dashboard.findall("./size"):
             maxwidth  = float(size.get("maxwidth")  or 1.0)
@@ -183,7 +186,7 @@ def main():
 
     # ── Action ──────────────────────────────────────────────────────
     if st.button("Modifier", type="primary"):
-        selection = edited_df[edited_df["Modifier"] == True]
+        selection = edited_df[edited_df["Modifier"]]
 
         if selection.empty:
             st.warning("Sélectionne au moins un dashboard.")
