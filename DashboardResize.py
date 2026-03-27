@@ -4,8 +4,6 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 import pandas as pd
 import zipfile
-import tempfile
-import os
 
 
 # ─────────────────────────────────────────────
@@ -23,10 +21,7 @@ def extraire_twb_depuis_twbx(file_bytes: bytes) -> bytes:
 
 
 def charger_contenu_xml(uploaded_file) -> bytes:
-    """
-    Charge le contenu XML depuis un .twb ou .twbx.
-    Lève une ValueError si le format n'est pas reconnu.
-    """
+    """Charge le contenu XML depuis un .twb ou .twbx."""
     raw = uploaded_file.read()
     if uploaded_file.name.endswith(".twbx"):
         return extraire_twb_depuis_twbx(raw)
@@ -151,6 +146,25 @@ def modifier_tableaux_de_bord(xml_content: bytes, modifications: dict,
 
 
 # ─────────────────────────────────────────────
+# Helper
+# ─────────────────────────────────────────────
+
+def init_df(dashboards):
+    """Construit le DataFrame de base pour le data_editor."""
+    return pd.DataFrame([
+        {
+            "Modifier":         False,
+            "Dashboard":        d["name"],
+            "Largeur actuelle": d["width"],
+            "Hauteur actuelle": d["height"],
+            "Nouvelle largeur": None,
+            "Nouvelle hauteur": None,
+        }
+        for d in dashboards
+    ])
+
+
+# ─────────────────────────────────────────────
 # UI
 # ─────────────────────────────────────────────
 
@@ -175,6 +189,15 @@ def main():
         st.warning("Aucun dashboard trouvé dans ce fichier.")
         return
 
+    # Initialiser df_base UNE SEULE FOIS par fichier.
+    # On ne réécrit jamais df_base depuis edited_df — c'est la clé du fix.
+    if (
+        "df_base" not in st.session_state
+        or st.session_state.get("fichier_actuel") != xml_file.name
+    ):
+        st.session_state["df_base"]        = init_df(dashboards)
+        st.session_state["fichier_actuel"] = xml_file.name
+
     # ── #1 — Appliquer à tous ────────────────────────────────────────
     st.subheader("Appliquer à tous les dashboards cochés")
     col_a, col_b, col_c = st.columns([1, 1, 1])
@@ -189,51 +212,38 @@ def main():
             step=1, placeholder="Ex : 1050", key="global_h"
         )
     with col_c:
-        st.write("")  # alignement vertical
+        st.write("")
         st.write("")
         appliquer_a_tous = st.button("↓ Appliquer à tous", use_container_width=True)
+
+    # "Appliquer à tous" : on modifie df_base puis st.rerun().
+    # Le data_editor repart d'un état propre sans conflit interne.
+    if appliquer_a_tous:
+        if largeur_globale is None and hauteur_globale is None:
+            st.warning("Renseigne au moins une dimension commune avant d'appliquer.")
+        else:
+            df_modifie = st.session_state["df_base"].copy()
+            mask = df_modifie["Modifier"] == True
+            if not mask.any():
+                mask = pd.Series([True] * len(df_modifie), index=df_modifie.index)
+            if largeur_globale is not None:
+                df_modifie.loc[mask, "Nouvelle largeur"] = float(largeur_globale)
+            if hauteur_globale is not None:
+                df_modifie.loc[mask, "Nouvelle hauteur"] = float(hauteur_globale)
+            st.session_state["df_base"] = df_modifie
+            st.rerun()
 
     # ── Tableau éditeur ──────────────────────────────────────────────
     st.subheader("Dashboards")
     st.caption("Cochez les dashboards à modifier et renseignez les nouvelles dimensions.")
 
-    # Initialiser ou mettre à jour le dataframe en session_state
-    if "df_dashboards" not in st.session_state or st.session_state.get("fichier_actuel") != xml_file.name:
-        st.session_state["df_dashboards"] = pd.DataFrame([
-            {
-                "Modifier": False,
-                "Dashboard": d["name"],
-                "Largeur actuelle": d["width"],
-                "Hauteur actuelle": d["height"],
-                "Nouvelle largeur": None,
-                "Nouvelle hauteur": None,
-            }
-            for d in dashboards
-        ])
-        st.session_state["fichier_actuel"] = xml_file.name
-
-    df = st.session_state["df_dashboards"].copy()
-
-    # Appliquer les dimensions globales aux lignes cochées
-    if appliquer_a_tous:
-        if largeur_globale is None and hauteur_globale is None:
-            st.warning("Renseigne au moins une dimension commune avant d'appliquer.")
-        else:
-            mask_coches = df["Modifier"] == True
-            if not mask_coches.any():
-                # Si rien n'est coché, appliquer à tout le monde
-                mask_coches = pd.Series([True] * len(df))
-            if largeur_globale is not None:
-                df.loc[mask_coches, "Nouvelle largeur"] = float(largeur_globale)
-            if hauteur_globale is not None:
-                df.loc[mask_coches, "Nouvelle hauteur"] = float(hauteur_globale)
-            st.session_state["df_dashboards"] = df
-
+    # On passe df_base tel quel. Le data_editor gère son propre état interne
+    # entre les reruns — on ne lui réinjecte pas ce qu'il vient de produire.
     edited_df = st.data_editor(
-        df,
+        st.session_state["df_base"],
         column_config={
-            "Modifier": st.column_config.CheckboxColumn("Modifier", width="small"),
-            "Dashboard": st.column_config.TextColumn("Dashboard", disabled=True),
+            "Modifier":         st.column_config.CheckboxColumn("Modifier", width="small"),
+            "Dashboard":        st.column_config.TextColumn("Dashboard", disabled=True),
             "Largeur actuelle": st.column_config.TextColumn("Largeur act.", disabled=True, width="small"),
             "Hauteur actuelle": st.column_config.TextColumn("Hauteur act.", disabled=True, width="small"),
             "Nouvelle largeur": st.column_config.NumberColumn(
@@ -245,11 +255,7 @@ def main():
         },
         hide_index=True,
         use_container_width=True,
-        key="data_editor"
     )
-
-    # Synchroniser les éditions manuelles dans session_state
-    st.session_state["df_dashboards"] = edited_df
 
     # ── Options globales (toggles) ───────────────────────────────────
     st.divider()
@@ -279,7 +285,6 @@ def main():
     ):
         selection = edited_df[edited_df["Modifier"]]
 
-        # Validation : dimensions renseignées pour toutes les lignes cochées
         lignes_incompletes = selection[
             selection["Nouvelle largeur"].isna() | selection["Nouvelle hauteur"].isna()
         ]
