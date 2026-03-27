@@ -110,7 +110,7 @@ def modifier_tableaux_de_bord(xml_content, modifications: dict,
             zone.set("h", str(nh))
 
     output = BytesIO()
-    tree.write(output, encoding="unicode", xml_declaration=False)
+    tree.write(output, encoding="utf-8", xml_declaration=False)
     output.seek(0)
     return output
 
