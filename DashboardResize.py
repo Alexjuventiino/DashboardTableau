@@ -9,17 +9,20 @@ def recuperer_noms_dashboards(xml_path):
     return [dashboard.get("name") for dashboard in root.findall(".//dashboard")]
 
 def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer_droite, deplacer_bas):
-    if deplacer_droite == True and deplacer_bas==False:
+    if maxwidth == 0 or maxheight == 0 or nouvelle_largeur == 0 or nouvelle_hauteur == 0:
+        raise ValueError("Les dimensions ne peuvent pas être nulles.")
+
+    if deplacer_droite and not deplacer_bas:
         nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
         nouveau_y = y
         nouveau_h = h
-    elif deplacer_bas == True and deplacer_droite==False:
+    elif deplacer_bas and not deplacer_droite:
         nouveau_x = x
         nouveau_w = w
         nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
         nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
-    elif deplacer_bas == True and deplacer_droite==True:
+    elif deplacer_bas and deplacer_droite:
         nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
         nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
         nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
@@ -32,16 +35,18 @@ def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur
 
     return int(nouveau_x), int(nouveau_w), int(nouveau_y), int(nouveau_h)
 
-def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer_droite,deplacer_bas):
+def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashboard_name, deplacer_droite, deplacer_bas):
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
-    for dashboard in root.findall(".//dashboard[@name='"+dashboard_name+"']"):
+    for dashboard in root.findall(".//dashboard"):
+        if dashboard.get("name") != dashboard_name:
+            continue
         for size in dashboard.findall("./size"):
-            maxwidth = float(size.get("maxwidth", 1.0))
+            maxwidth = float(size.get("maxwidth") or 1.0)
             size.set("maxwidth", str(nouvelle_largeur))
             size.set("minwidth", str(nouvelle_largeur))
-            maxheight = float(size.get("maxheight", 1.0))
+            maxheight = float(size.get("maxheight") or 1.0)
             size.set("maxheight", str(nouvelle_hauteur))
             size.set("minheight", str(nouvelle_hauteur))
 
@@ -50,15 +55,16 @@ def modifier_tableau_de_bord(xml_path, nouvelle_largeur, nouvelle_hauteur, dashb
             w = int(zone.get("w", 0))
             y = int(zone.get("y", 0))
             h = int(zone.get("h", 0))
-            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer_droite,deplacer_bas)
+            nouveau_x, nouveau_w, nouveau_y, nouveau_h = calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight, nouvelle_largeur, nouvelle_hauteur, deplacer_droite, deplacer_bas)
             zone.set("x", str(nouveau_x))
             zone.set("w", str(nouveau_w))
             zone.set("y", str(nouveau_y))
             zone.set("h", str(nouveau_h))
-            
-    nouveau_nom_fichier = "nouveau_fichier.twb"
-    tree.write(nouveau_nom_fichier)
-    return nouveau_nom_fichier
+
+    output = BytesIO()
+    tree.write(output, encoding="unicode", xml_declaration=False)
+    output.seek(0)
+    return output
     
 def main():
     st.title("Modification de Tableau de Bord")
@@ -83,16 +89,18 @@ def main():
         
         if st.button("Modifier"):
             if nouvelle_largeur is None or nouvelle_hauteur is None:
-                    st.error("Renseigne largeur et hauteur.")
+                st.error("Renseigne largeur et hauteur.")
             else:
-                fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier,deplacer_droite,deplacer_bas)
-                #Télécharger le fichier modifié
-                st.download_button(
-                    label="Télécharger le fichier modifié", 
-                    data=BytesIO(open(fichier_modifie, 'rb').read()),
-                    file_name=fichier_modifie,
-                    key="download_button"
-                )
+                try:
+                    fichier_modifie = modifier_tableau_de_bord(BytesIO(xml_content), nouvelle_largeur, nouvelle_hauteur, dashboard_a_modifier, deplacer_droite, deplacer_bas)
+                    st.download_button(
+                        label="Télécharger le fichier modifié",
+                        data=fichier_modifie,
+                        file_name="nouveau_fichier.twb",
+                        key="download_button"
+                    )
+                except ValueError as e:
+                    st.error(str(e))
 
 
 if __name__ == "__main__":
