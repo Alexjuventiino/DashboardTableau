@@ -261,7 +261,7 @@ def main():
                 st.markdown(
                     f"- **Catalogue :** `{c['catalog']}`"
                     + (f"  |  **Serveur :** `{c['server']}`" if c['server'] else "")
-                    + (f"  |  **Base de données :** `{c['database']}`" if c['database'] else "")
+                    + (f"  |  **Schéma :** `{c['schema']}`" if c['schema'] else "")
                 )
 
             st.divider()

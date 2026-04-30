@@ -3,9 +3,17 @@ from utils import parser_xml, serialiser_xml
 
 def recuperer_catalogues(xml_content: bytes) -> list:
     """
-    Retourne la liste des catalogues uniques détectés dans le fichier TWB.
-    Chaque entrée contient le catalogue, le serveur et la base de données
-    pour permettre à l'utilisateur d'identifier la connexion.
+    Retourne la liste des catalogues uniques détectés dans les connexions
+    Databricks du fichier TWB.
+
+    Dans le XML Tableau, le catalogue Databricks est stocké dans l'attribut
+    'dbname' des éléments <connection class='databricks'> imbriqués dans
+    les <named-connection>.
+
+    Chaque entrée retournée contient :
+      - catalog  : valeur de dbname (le catalogue Databricks)
+      - schema   : valeur de schema (la base de données / schéma)
+      - server   : le serveur Databricks
     """
     tree = parser_xml(xml_content)
     root = tree.getroot()
@@ -14,18 +22,19 @@ def recuperer_catalogues(xml_content: bytes) -> list:
     connexions = []
 
     for conn in root.iter("connection"):
-        catalog = conn.get("catalog", "")
+        if conn.get("class") != "databricks":
+            continue
+        catalog = conn.get("dbname", "")
         if not catalog:
             continue
-        cle = (catalog, conn.get("server", ""), conn.get("database", ""))
+        cle = (catalog, conn.get("schema", ""), conn.get("server", ""))
         if cle in vus:
             continue
         vus.add(cle)
         connexions.append({
-            "catalog":  catalog,
-            "server":   conn.get("server", ""),
-            "database": conn.get("database", ""),
-            "class":    conn.get("class", ""),
+            "catalog": catalog,
+            "schema":  conn.get("schema", ""),
+            "server":  conn.get("server", ""),
         })
 
     return connexions
@@ -34,13 +43,12 @@ def recuperer_catalogues(xml_content: bytes) -> list:
 def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
                         catalogue_cible: str) -> tuple:
     """
-    Remplace catalogue_source par catalogue_cible dans toutes les occurrences :
-      - attribut 'catalog' des éléments <connection>
-      - attribut 'catalog' des éléments <relation>
-      - chemins de table de la forme [catalogue_source].[schema].[table]
+    Remplace catalogue_source par catalogue_cible dans l'attribut 'dbname'
+    de tous les éléments <connection class='databricks'> du fichier TWB.
 
     Retourne (BytesIO, nb_remplacements).
-    Lève ValueError si aucune occurrence n'est trouvée.
+    Lève ValueError si aucune occurrence n'est trouvée ou si les arguments
+    sont invalides.
     """
     if not catalogue_source or not catalogue_cible:
         raise ValueError("Le catalogue source et le catalogue cible ne peuvent pas être vides.")
@@ -51,26 +59,18 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
     root = tree.getroot()
     nb = 0
 
-    # 1. Attribut 'catalog' dans <connection>
     for conn in root.iter("connection"):
-        if conn.get("catalog") == catalogue_source:
-            conn.set("catalog", catalogue_cible)
-            nb += 1
-
-    # 2. Attribut 'catalog' dans <relation>
-    for rel in root.iter("relation"):
-        if rel.get("catalog") == catalogue_source:
-            rel.set("catalog", catalogue_cible)
-            nb += 1
-        # Chemin complet [catalogue].[schema].[table] dans l'attribut 'table'
-        table_attr = rel.get("table", "")
-        if f"[{catalogue_source}]" in table_attr:
-            rel.set("table", table_attr.replace(f"[{catalogue_source}]", f"[{catalogue_cible}]"))
+        if conn.get("class") != "databricks":
+            continue
+        if conn.get("dbname") == catalogue_source:
+            conn.set("dbname", catalogue_cible)
             nb += 1
 
     if nb == 0:
         raise ValueError(
-            f"Aucune occurrence du catalogue « {catalogue_source} » trouvée dans ce fichier."
+            f"Aucune connexion Databricks avec le catalogue « {catalogue_source} » "
+            "trouvée dans ce fichier."
         )
 
     return serialiser_xml(tree), nb
+
