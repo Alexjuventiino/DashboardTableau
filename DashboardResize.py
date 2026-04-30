@@ -5,6 +5,7 @@ import pandas as pd
 from utils import charger_contenu_xml, parser_xml
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
 from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres
+from outil3_connexion import recuperer_catalogues, remplacer_catalogue
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -29,12 +30,12 @@ def main():
 
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
-        for key in ["df_resize", "df_filtres", "filtres_source"]:
+        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
     st.divider()
-    tab_resize, tab_filtres = st.tabs(["📐 Redimensionner", "🔽 Formater les filtres"])
+    tab_resize, tab_filtres, tab_connexion = st.tabs(["📐 Redimensionner", "🔽 Formater les filtres", "🔌 Changer la connexion"])
 
 
     # ════════════════════════════════════════════════════
@@ -239,6 +240,69 @@ def main():
                     )
                 except ValueError as e:
                     st.error(str(e))
+
+
+    # ════════════════════════════════════════════════════
+    # ONGLET 3 — CHANGER LA CONNEXION
+    # ════════════════════════════════════════════════════
+    with tab_connexion:
+
+        if "catalogues" not in st.session_state:
+            st.session_state["catalogues"] = recuperer_catalogues(xml_content)
+
+        catalogues = st.session_state["catalogues"]
+
+        if not catalogues:
+            st.warning("Aucune connexion avec un catalogue Databricks détectée dans ce fichier.")
+        else:
+            # Afficher les connexions détectées
+            st.subheader("Connexions détectées")
+            for c in catalogues:
+                st.markdown(
+                    f"- **Catalogue :** `{c['catalog']}`"
+                    + (f"  |  **Serveur :** `{c['server']}`" if c['server'] else "")
+                    + (f"  |  **Base de données :** `{c['database']}`" if c['database'] else "")
+                )
+
+            st.divider()
+            st.subheader("Remplacer le catalogue")
+
+            catalogues_uniques = [c["catalog"] for c in catalogues]
+            catalogue_source = st.selectbox(
+                "Catalogue à remplacer",
+                options=catalogues_uniques,
+                key="conn_source",
+            )
+            catalogue_cible = st.text_input(
+                "Nouveau catalogue cible",
+                placeholder="Ex : datalake_insight_analytics",
+                key="conn_cible",
+            )
+
+            st.write("")
+            if st.button("🔄 Remplacer", type="primary", key="btn_connexion"):
+                if not catalogue_cible or not catalogue_cible.strip():
+                    st.error("Le catalogue cible ne peut pas être vide.")
+                else:
+                    try:
+                        fichier, nb = remplacer_catalogue(
+                            xml_content,
+                            catalogue_source,
+                            catalogue_cible.strip(),
+                        )
+                        st.success(
+                            f"✅ Catalogue remplacé ({nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''})."
+                        )
+                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        st.download_button(
+                            label="⬇️ Télécharger le fichier modifié",
+                            data=fichier,
+                            file_name=f"{nom_base}_connexion.twb",
+                            mime="application/xml",
+                            key="dl_connexion",
+                        )
+                    except ValueError as e:
+                        st.error(str(e))
 
 
 if __name__ == "__main__":
