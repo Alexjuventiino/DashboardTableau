@@ -5,7 +5,10 @@ import pandas as pd
 from utils import charger_contenu_xml, parser_xml
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
 from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres
-from outil3_connexion import recuperer_catalogues, remplacer_catalogue
+from outil3_connexion import (
+    recuperer_catalogues, remplacer_catalogue,
+    recuperer_tables_sql, apercu_remplacement_suffixe, remplacer_suffixe_tables,
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -30,7 +33,7 @@ def main():
 
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
-        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues"]:
+        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues", "tables_sql"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
@@ -249,6 +252,7 @@ def main():
 
         if "catalogues" not in st.session_state:
             st.session_state["catalogues"] = recuperer_catalogues(xml_content)
+            st.session_state["tables_sql"] = recuperer_tables_sql(xml_content)
 
         catalogues = st.session_state["catalogues"]
 
@@ -300,6 +304,71 @@ def main():
                             file_name=f"{nom_base}_connexion.twb",
                             mime="application/xml",
                             key="dl_connexion",
+                        )
+                    except ValueError as e:
+                        st.error(str(e))
+
+            # ── Section tables dbt ──────────────────────────────
+            st.divider()
+            st.subheader("Tables — supprimer un suffixe dbt")
+            st.caption(
+                "En développement dbt, les tables ont un suffixe propre au développeur "
+                "(ex : `reporting_dqplay_alerting_idir`). Renseignez le suffixe à supprimer."
+            )
+
+            tables_sql = st.session_state.get("tables_sql", [])
+            if not tables_sql:
+                st.info("Aucune table détectée dans les requêtes SQL du fichier.")
+            else:
+                with st.expander(f"Tables détectées dans les requêtes SQL ({len(tables_sql)})"):
+                    st.dataframe(
+                        pd.DataFrame(tables_sql),
+                        column_config={
+                            "schema": st.column_config.TextColumn("Schéma"),
+                            "table":  st.column_config.TextColumn("Table"),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+                suffixe = st.text_input(
+                    "Suffixe à supprimer",
+                    placeholder="Ex : _idir",
+                    key="conn_suffixe",
+                )
+
+                if suffixe and suffixe.strip():
+                    apercu = apercu_remplacement_suffixe(tables_sql, suffixe.strip())
+                    if apercu:
+                        st.caption(f"**{len(apercu)} table(s) concernée(s) :**")
+                        st.dataframe(
+                            pd.DataFrame(apercu),
+                            column_config={
+                                "schema":         st.column_config.TextColumn("Schéma"),
+                                "table_actuelle": st.column_config.TextColumn("Actuelle"),
+                                "table_cible":    st.column_config.TextColumn("Après suppression"),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                        )
+                    else:
+                        st.info("Aucune table ne se termine par ce suffixe.")
+
+                st.write("")
+                if st.button("✂️ Supprimer le suffixe", type="primary", key="btn_suffixe",
+                             disabled=not (suffixe and suffixe.strip())):
+                    try:
+                        fichier, nb = remplacer_suffixe_tables(xml_content, suffixe.strip())
+                        st.success(
+                            f"✅ Suffixe supprimé ({nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''})."
+                        )
+                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        st.download_button(
+                            label="⬇️ Télécharger le fichier modifié",
+                            data=fichier,
+                            file_name=f"{nom_base}_tables.twb",
+                            mime="application/xml",
+                            key="dl_suffixe",
                         )
                     except ValueError as e:
                         st.error(str(e))
