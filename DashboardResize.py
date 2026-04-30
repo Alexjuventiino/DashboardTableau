@@ -7,7 +7,7 @@ from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_d
 from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres
 from outil3_connexion import (
     recuperer_catalogues, remplacer_catalogue,
-    recuperer_tables_sql, apercu_remplacement_suffixe, remplacer_suffixe_tables,
+    recuperer_tables_sql, init_df_tables, remplacer_tables,
 )
 
 
@@ -33,7 +33,7 @@ def main():
 
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
-        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues", "tables_sql"]:
+        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues", "tables_sql", "df_tables"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
@@ -253,6 +253,7 @@ def main():
         if "catalogues" not in st.session_state:
             st.session_state["catalogues"] = recuperer_catalogues(xml_content)
             st.session_state["tables_sql"] = recuperer_tables_sql(xml_content)
+            st.session_state["df_tables"]  = init_df_tables(st.session_state["tables_sql"])
 
         catalogues = st.session_state["catalogues"]
 
@@ -310,57 +311,69 @@ def main():
 
             # ── Section tables dbt ──────────────────────────────
             st.divider()
-            st.subheader("Tables — supprimer un suffixe dbt")
+            st.subheader("Tables — renommer")
             st.caption(
-                "En développement dbt, les tables ont un suffixe propre au développeur "
-                "(ex : `reporting_dqplay_alerting_idir`). Renseignez le suffixe à supprimer."
+                "Cochez les tables à renommer et éditez le nom cible. "
+                "Le champ suffixe permet de pré-remplir automatiquement toutes les lignes correspondantes."
             )
 
             tables_sql = st.session_state.get("tables_sql", [])
             if not tables_sql:
-                st.info("Aucune table détectée dans les requêtes SQL du fichier.")
+                st.info("Aucune table détectée dans le fichier.")
             else:
-                with st.expander(f"Tables détectées dans les requêtes SQL ({len(tables_sql)})"):
-                    st.dataframe(
-                        pd.DataFrame(tables_sql),
-                        column_config={
-                            "schema": st.column_config.TextColumn("Schéma"),
-                            "table":  st.column_config.TextColumn("Table"),
-                        },
-                        hide_index=True,
-                        use_container_width=True,
+                # Pré-remplissage par suffixe
+                col_suf, col_btn = st.columns([2, 1])
+                with col_suf:
+                    suffixe = st.text_input(
+                        "Pré-remplir depuis un suffixe",
+                        placeholder="Ex : _idir",
+                        key="conn_suffixe",
                     )
+                with col_btn:
+                    st.write("")
+                    st.write("")
+                    if st.button("↓ Pré-remplir", use_container_width=True, key="btn_prefill",
+                                 disabled=not (suffixe and suffixe.strip())):
+                        suf = suffixe.strip()
+                        df = st.session_state["df_tables"].copy()
+                        mask = df["Table actuelle"].str.endswith(suf)
+                        if not mask.any():
+                            st.warning(f"Aucune table ne se termine par « {suf} ».")
+                        else:
+                            df.loc[mask, "Table cible"] = df.loc[mask, "Table actuelle"].str[:-len(suf)]
+                            df.loc[mask, "Modifier"] = True
+                            st.session_state["df_tables"] = df
+                            st.rerun()
 
-                suffixe = st.text_input(
-                    "Suffixe à supprimer",
-                    placeholder="Ex : _idir",
-                    key="conn_suffixe",
+                # Data editor
+                edited_tables = st.data_editor(
+                    st.session_state["df_tables"],
+                    column_config={
+                        "Modifier":       st.column_config.CheckboxColumn("Modifier", width="small"),
+                        "Type":           st.column_config.TextColumn("Type", disabled=True, width="small"),
+                        "Catalogue":      st.column_config.TextColumn("Catalogue", disabled=True),
+                        "Schéma":         st.column_config.TextColumn("Schéma", disabled=True),
+                        "Table actuelle": st.column_config.TextColumn("Table actuelle", disabled=True),
+                        "Table cible":    st.column_config.TextColumn("Table cible"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_tables",
                 )
 
-                if suffixe and suffixe.strip():
-                    apercu = apercu_remplacement_suffixe(tables_sql, suffixe.strip())
-                    if apercu:
-                        st.caption(f"**{len(apercu)} table(s) concernée(s) :**")
-                        st.dataframe(
-                            pd.DataFrame(apercu),
-                            column_config={
-                                "schema":         st.column_config.TextColumn("Schéma"),
-                                "table_actuelle": st.column_config.TextColumn("Actuelle"),
-                                "table_cible":    st.column_config.TextColumn("Après suppression"),
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                        )
-                    else:
-                        st.info("Aucune table ne se termine par ce suffixe.")
-
+                nb_coches_tables = int(edited_tables["Modifier"].sum())
                 st.write("")
-                if st.button("✂️ Supprimer le suffixe", type="primary", key="btn_suffixe",
-                             disabled=not (suffixe and suffixe.strip())):
+                if st.button(
+                    f"Renommer ({nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} sélectionnée{'s' if nb_coches_tables > 1 else ''})",
+                    type="primary",
+                    disabled=nb_coches_tables == 0,
+                    key="btn_tables",
+                ):
+                    selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
                     try:
-                        fichier, nb = remplacer_suffixe_tables(xml_content, suffixe.strip())
+                        fichier, nb = remplacer_tables(xml_content, selection)
                         st.success(
-                            f"✅ Suffixe supprimé ({nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''})."
+                            f"✅ {nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''}."
                         )
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                         st.download_button(
@@ -368,7 +381,7 @@ def main():
                             data=fichier,
                             file_name=f"{nom_base}_tables.twb",
                             mime="application/xml",
-                            key="dl_suffixe",
+                            key="dl_tables",
                         )
                     except ValueError as e:
                         st.error(str(e))

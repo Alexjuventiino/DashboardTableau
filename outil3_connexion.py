@@ -81,18 +81,25 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
 # TABLES — détection et remplacement de suffixes dbt
 # ─────────────────────────────────────────────────────────────
 
-_RE_TABLE = re.compile(
+# Pattern pour les requêtes SQL custom : FROM/JOIN schema.table
+_RE_SQL_TABLE = re.compile(
     r'(?:FROM|JOIN)\s+([\w]+)\.([\w]+)',
     re.IGNORECASE,
+)
+
+# Pattern pour l'attribut table='[catalog].[schema].[table]' ou '[schema].[table]'
+_RE_ATTR_TABLE = re.compile(
+    r'^(?:\[([^\]]+)\]\.)?\[([^\]]+)\]\.\[([^\]]+)\]$'
 )
 
 
 def recuperer_tables_sql(xml_content: bytes) -> list:
     """
-    Extrait toutes les références schema.table uniques depuis les requêtes SQL
-    custom (éléments <relation type='text'>) des connexions Databricks.
+    Extrait toutes les références de table uniques depuis :
+    - les requêtes SQL custom (<relation type='text'>) via FROM/JOIN
+    - les relations directes (<relation type='table'>) via l'attribut table='[cat].[schema].[table]'
 
-    Retourne une liste de dicts {"schema": ..., "table": ...} triée par table.
+    Retourne une liste de dicts {"source", "catalog", "schema", "table"} triée par table.
     """
     tree = parser_xml(xml_content)
     root = tree.getroot()
@@ -101,73 +108,121 @@ def recuperer_tables_sql(xml_content: bytes) -> list:
     tables = []
 
     for rel in root.iter("relation"):
-        if rel.get("type") != "text":
-            continue
-        sql = rel.text or ""
-        for m in _RE_TABLE.finditer(sql):
-            schema, table = m.group(1), m.group(2)
-            cle = (schema, table)
-            if cle not in vues:
-                vues.add(cle)
-                tables.append({"schema": schema, "table": table})
+        rel_type = rel.get("type")
+
+        if rel_type == "text":
+            sql = rel.text or ""
+            for m in _RE_SQL_TABLE.finditer(sql):
+                schema, table = m.group(1), m.group(2)
+                cle = ("sql", schema, table)
+                if cle not in vues:
+                    vues.add(cle)
+                    tables.append({"source": "SQL", "catalog": "", "schema": schema, "table": table})
+
+        elif rel_type == "table":
+            attr = rel.get("table", "")
+            m = _RE_ATTR_TABLE.match(attr)
+            if m:
+                catalog = m.group(1) or ""
+                schema  = m.group(2)
+                table   = m.group(3)
+                cle = ("attr", catalog, schema, table)
+                if cle not in vues:
+                    vues.add(cle)
+                    tables.append({"source": "Table directe", "catalog": catalog, "schema": schema, "table": table})
 
     tables.sort(key=lambda x: (x["schema"], x["table"]))
     return tables
 
 
-def apercu_remplacement_suffixe(tables: list, suffixe: str) -> list:
-    """
-    Retourne la liste des tables dont le nom se termine par suffixe,
-    avec leur nom cible (sans le suffixe).
-    Chaque entrée : {"schema", "table_actuelle", "table_cible"}.
-    """
-    if not suffixe:
-        return []
-    return [
+def init_df_tables(tables: list):
+    import pandas as pd
+    return pd.DataFrame([
         {
-            "schema":        t["schema"],
-            "table_actuelle": t["table"],
-            "table_cible":   t["table"][: -len(suffixe)],
+            "Modifier":       False,
+            "Type":           t["source"],
+            "Catalogue":      t["catalog"],
+            "Schéma":         t["schema"],
+            "Table actuelle": t["table"],
+            "Table cible":    t["table"],
         }
         for t in tables
-        if t["table"].endswith(suffixe)
+    ])
+
+
+def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
+    """
+    Renomme les tables selon la liste de modifications.
+    Chaque élément doit avoir les clés : Type, Catalogue, Schéma,
+    Table actuelle, Table cible.
+    Seules les lignes où Table actuelle != Table cible sont traitées.
+
+    Retourne (BytesIO, nb_occurrences_modifiées).
+    """
+    modifs = [
+        m for m in modifications
+        if m["Table actuelle"] != m["Table cible"] and m["Table cible"].strip()
     ]
-
-
-def remplacer_suffixe_tables(xml_content: bytes, suffixe: str) -> tuple:
-    """
-    Dans toutes les requêtes SQL custom (relation type='text'), remplace
-    chaque occurrence de « schema.table<suffixe> » par « schema.table ».
-
-    Retourne (BytesIO, nb_remplacements).
-    Lève ValueError si aucune occurrence n'est trouvée.
-    """
-    if not suffixe:
-        raise ValueError("Le suffixe ne peut pas être vide.")
+    if not modifs:
+        raise ValueError("Aucune table modifiée (noms source et cible identiques ou cible vide).")
 
     tree = parser_xml(xml_content)
     root = tree.getroot()
     nb = 0
 
-    # Regex qui capture schema.table suivi exactement du suffixe,
-    # sans prolongement (word boundary ou fin de token SQL)
-    pattern = re.compile(
-        r'((?:FROM|JOIN)\s+\w+\.\w+)' + re.escape(suffixe) + r'(?=\s|$|;|\))',
-        re.IGNORECASE,
-    )
+    # Deux maps selon le type de relation
+    sql_map  = {}   # (schema, table_actuelle) → table_cible
+    attr_map = {}   # (catalog, schema, table_actuelle) → table_cible
+
+    for m in modifs:
+        if m["Type"] == "SQL":
+            sql_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
+        else:
+            attr_map[(m["Catalogue"], m["Schéma"], m["Table actuelle"])] = m["Table cible"]
 
     for rel in root.iter("relation"):
-        if rel.get("type") != "text" or not rel.text:
-            continue
-        nouveau_sql, n = pattern.subn(r'\1', rel.text)
-        if n:
-            rel.text = nouveau_sql
-            nb += n
+        rel_type = rel.get("type")
+
+        if rel_type == "text" and rel.text and sql_map:
+            sql = rel.text
+            for (schema, table_act), table_cib in sql_map.items():
+                pattern = re.compile(
+                    r'((?:FROM|JOIN)\s+' + re.escape(schema) + r'\.)'
+                    + re.escape(table_act)
+                    + r'(?=\s|$|;|\))',
+                    re.IGNORECASE,
+                )
+                nouveau_sql, n = pattern.subn(r'\g<1>' + table_cib, sql)
+                if n:
+                    sql = nouveau_sql
+                    nb += n
+            rel.text = sql
+
+        elif rel_type == "table" and attr_map:
+            attr = rel.get("table", "")
+            m_re = _RE_ATTR_TABLE.match(attr)
+            if m_re:
+                catalog = m_re.group(1) or ""
+                schema  = m_re.group(2)
+                table   = m_re.group(3)
+                key = (catalog, schema, table)
+                if key in attr_map:
+                    table_cib = attr_map[key]
+                    if catalog:
+                        rel.set("table", f"[{catalog}].[{schema}].[{table_cib}]")
+                    else:
+                        rel.set("table", f"[{schema}].[{table_cib}]")
+                    nb += 1
+
+            name = rel.get("name", "")
+            for modif in modifs:
+                if modif["Type"] == "Table directe" and name == modif["Table actuelle"]:
+                    rel.set("name", modif["Table cible"])
+                    nb += 1
+                    break
 
     if nb == 0:
-        raise ValueError(
-            f"Aucune table avec le suffixe « {suffixe} » trouvée dans les requêtes SQL."
-        )
+        raise ValueError("Aucune occurrence trouvée dans le fichier.")
 
     return serialiser_xml(tree), nb
 
