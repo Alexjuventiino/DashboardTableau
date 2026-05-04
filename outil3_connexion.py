@@ -68,6 +68,21 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
             conn.set("dbname", catalogue_cible)
             nb += 1
 
+    # Met à jour le catalogue dans les <object-id> des metadata-records.
+    # Format : [table (catalog.schema.table)_HASH]
+    for oid in root.iter("object-id"):
+        if oid.text and catalogue_source in oid.text:
+            oid.text = oid.text.replace(
+                f"({catalogue_source}.",
+                f"({catalogue_cible}.",
+            )
+
+    # Met à jour le caption des datasources qui contiennent le catalogue.
+    for ds in root.iter("datasource"):
+        caption = ds.get("caption", "")
+        if catalogue_source in caption:
+            ds.set("caption", caption.replace(catalogue_source, catalogue_cible))
+
     if nb == 0:
         raise ValueError(
             f"Aucune connexion Databricks avec le catalogue « {catalogue_source} » "
@@ -220,6 +235,38 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
                     rel.set("name", modif["Table cible"])
                     nb += 1
                     break
+
+    # Pour les tables directes : met à jour <parent-name> et <object-id>
+    # dans les metadata-records.
+    for modif in [m for m in modifs if m["Type"] == "Table directe"]:
+        table_act = modif["Table actuelle"]
+        table_cib = modif["Table cible"]
+
+        # <parent-name>[table_actuelle]</parent-name>
+        for pn in root.iter("parent-name"):
+            if pn.text == f"[{table_act}]":
+                pn.text = f"[{table_cib}]"
+
+        # <object-id>[table_actuelle (catalog.schema.table_actuelle)_HASH]</object-id>
+        for oid in root.iter("object-id"):
+            if not oid.text:
+                continue
+            new_text = oid.text
+            # Remplace le nom au début : [old_table (
+            new_text = new_text.replace(f"[{table_act} (", f"[{table_cib} (")
+            # Remplace le nom dans le chemin : .old_table)
+            new_text = re.sub(
+                r'\.' + re.escape(table_act) + r'\)',
+                '.' + table_cib + ')',
+                new_text,
+            )
+            oid.text = new_text
+
+        # <datasource caption='table_actuelle (...)'>
+        for ds in root.iter("datasource"):
+            caption = ds.get("caption", "")
+            if table_act in caption:
+                ds.set("caption", caption.replace(table_act, table_cib))
 
     if nb == 0:
         raise ValueError("Aucune occurrence trouvée dans le fichier.")
