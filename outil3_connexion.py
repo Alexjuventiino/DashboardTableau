@@ -77,6 +77,17 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
                 f"({catalogue_cible}.",
             )
 
+    # Met à jour le catalogue dans l'attribut table='[catalog].[schema].[table]'
+    # de tous les <relation type='table'> (y compris dans <object-graph>).
+    old_prefix = f"[{catalogue_source}]."
+    new_prefix = f"[{catalogue_cible}]."
+    for rel in root.iter("relation"):
+        if rel.get("type") != "table":
+            continue
+        attr = rel.get("table", "")
+        if attr.startswith(old_prefix):
+            rel.set("table", new_prefix + attr[len(old_prefix):])
+
     # Met à jour le caption des datasources qui contiennent le catalogue.
     for ds in root.iter("datasource"):
         caption = ds.get("caption", "")
