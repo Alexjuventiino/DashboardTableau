@@ -289,20 +289,46 @@ def main():
             # ── Serveur / chemin HTTP ───────────────────────────
             st.divider()
             st.subheader("2 — Serveur / chemin HTTP")
-            st.caption("Modifiez uniquement les champs que vous souhaitez changer.")
+
+            _ENVS = {
+                "Exploration (préprod/dev)": {
+                    "server":    "decathlon-dataplatform-exploration.cloud.databricks.com",
+                    "http_path": "/sql/1.0/warehouses/e71fadc53501a3f1",
+                },
+                "Indus (prod)": {
+                    "server":    "decathlon-dataplatform-indus.cloud.databricks.com",
+                    "http_path": "/sql/1.0/warehouses/a978e5a19876d1b6",
+                },
+                "Personnalisé": None,
+            }
 
             conn_ref = catalogues[0]
+
+            preset = st.radio(
+                "Environnement cible",
+                options=list(_ENVS.keys()),
+                horizontal=True,
+                key="conn_env_preset",
+            )
+
+            if _ENVS[preset] is not None:
+                _default_srv  = _ENVS[preset]["server"]
+                _default_http = _ENVS[preset]["http_path"]
+            else:
+                _default_srv  = conn_ref["server"]
+                _default_http = conn_ref["http_path"]
+
             col_srv, col_http = st.columns(2)
             with col_srv:
                 serveur_cible = st.text_input(
                     "Nom d'hôte du serveur",
-                    value=conn_ref["server"],
+                    value=_default_srv,
                     key="conn_server_cible",
                 )
             with col_http:
                 http_path_cible = st.text_input(
                     "Chemin HTTP (v-http-path)",
-                    value=conn_ref["http_path"],
+                    value=_default_http,
                     key="conn_http_cible",
                 )
 
