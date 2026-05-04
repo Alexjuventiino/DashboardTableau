@@ -274,11 +274,18 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
 
         sheet_fi = ws_fields.get(feuille, {})
 
+        # Trouve l'index d'insertion sûr pour datasource-dependencies
+        # La dépendance ne peut être ajoutée que si <datasources> existe déjà
+        # (le schéma exige : ...datasources, datasource-dependencies*, zones...)
+        _has_datasources = dash_elem.find('datasources') is not None
+
         def _get_dep(ds_name: str):
+            if not _has_datasources:
+                return None  # pas de <datasources> → on ne peut pas ajouter de dep
             for dep in dash_elem.findall('datasource-dependencies'):
                 if dep.get('datasource', '') == ds_name:
                     return dep
-            # Doit être inséré AVANT <zones> (exigence du schéma Tableau)
+            # Insérer juste avant <zones>
             zones_idx = next(
                 (i for i, c in enumerate(dash_elem) if c.tag == 'zones'),
                 len(list(dash_elem)),
@@ -312,15 +319,16 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             dep      = _get_dep(ds_name)
             col_name = fi['field_name']
 
-            if col_name not in {c.get('name', '') for c in dep.findall('column')}:
-                col_el = ET.SubElement(dep, 'column')
-                for k, v in fi['column_attribs'].items():
-                    col_el.set(k, v)
+            if dep is not None:
+                if col_name not in {c.get('name', '') for c in dep.findall('column')}:
+                    col_el = ET.SubElement(dep, 'column')
+                    for k, v in fi['column_attribs'].items():
+                        col_el.set(k, v)
 
-            if instance_name not in {c.get('name', '') for c in dep.findall('column-instance')}:
-                ci_el = ET.SubElement(dep, 'column-instance')
-                for k, v in fi['instance_attribs'].items():
-                    ci_el.set(k, v)
+                if instance_name not in {c.get('name', '') for c in dep.findall('column-instance')}:
+                    ci_el = ET.SubElement(dep, 'column-instance')
+                    for k, v in fi['instance_attribs'].items():
+                        ci_el.set(k, v)
 
             # Insérer AVANT <zone-style> (doit rester le dernier enfant)
             zone_style_idx = next(
