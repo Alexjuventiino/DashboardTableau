@@ -3,8 +3,9 @@ TRANSLATIONS = {
     "fr": {
         # ── Général ────────────────────────────────────────────────
         "title":        "🧰 Boîte à outils Tableau",
-        "upload_label": "Uploader le fichier .twb ou .twbx",
+        "upload_label": "Uploader le fichier .twb, .twbx ou .tds",
         "upload_error": "❌ Impossible de lire le fichier : {}",
+        "tds_not_applicable": "Cet outil ne s'applique pas aux fichiers .tds (source de données sans classeur).",
         # ── Onglets ────────────────────────────────────────────────
         "tab_resize":    "📐 Redimensionner",
         "tab_filters":   "🔽 Formater les filtres",
@@ -112,8 +113,9 @@ TRANSLATIONS = {
     "en": {
         # ── General ────────────────────────────────────────────────
         "title":        "🧰 Tableau Toolkit",
-        "upload_label": "Upload the .twb or .twbx file",
+        "upload_label": "Upload the .twb, .twbx or .tds file",
         "upload_error": "❌ Unable to read the file: {}",
+        "tds_not_applicable": "This tool does not apply to .tds files (data source without workbook).",
         # ── Tabs ───────────────────────────────────────────────────
         "tab_resize":    "📐 Resize",
         "tab_filters":   "🔽 Format Filters",

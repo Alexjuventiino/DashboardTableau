@@ -36,7 +36,8 @@ def main():
         st.title(T["title"])
 
     # Upload unique partagé entre les onglets
-    xml_file = st.file_uploader(T["upload_label"], type=["twb", "twbx"])
+    xml_file = st.file_uploader(T["upload_label"], type=["twb", "twbx", "tds"])
+    _is_tds = xml_file is not None and xml_file.name.endswith(".tds")
 
     if xml_file is None:
         return
@@ -62,207 +63,212 @@ def main():
     # ONGLET 1 — REDIMENSIONNER
     # ════════════════════════════════════════════════════
     with tab_resize:
-        dashboards = recuperer_dashboards_avec_tailles(xml_content)
-        if not dashboards:
-            st.warning(T["resize_no_dashboard"])
+        if _is_tds:
+            st.info(T["tds_not_applicable"])
         else:
-            if "df_resize" not in st.session_state:
-                st.session_state["df_resize"] = init_df_resize(dashboards)
+            dashboards = recuperer_dashboards_avec_tailles(xml_content)
+            if not dashboards:
+                st.warning(T["resize_no_dashboard"])
+            else:
+                if "df_resize" not in st.session_state:
+                    st.session_state["df_resize"] = init_df_resize(dashboards)
 
-            # Appliquer à tous
-            st.subheader(T["resize_apply_all_title"])
-            col_a, col_b, col_c = st.columns([1, 1, 1])
-            with col_a:
-                largeur_globale = st.number_input(
-                    T["resize_common_width"], min_value=1, max_value=3000, value=None,
-                    step=1, placeholder="Ex : 1600", key="resize_global_w"
+                # Appliquer à tous
+                st.subheader(T["resize_apply_all_title"])
+                col_a, col_b, col_c = st.columns([1, 1, 1])
+                with col_a:
+                    largeur_globale = st.number_input(
+                        T["resize_common_width"], min_value=1, max_value=3000, value=None,
+                        step=1, placeholder="Ex : 1600", key="resize_global_w"
+                    )
+                with col_b:
+                    hauteur_globale = st.number_input(
+                        T["resize_common_height"], min_value=1, max_value=6000, value=None,
+                        step=1, placeholder="Ex : 1050", key="resize_global_h"
+                    )
+                with col_c:
+                    st.write("")
+                    st.write("")
+                    if st.button(T["resize_btn_apply_all"], use_container_width=True, key="resize_apply_all"):
+                        if largeur_globale is None and hauteur_globale is None:
+                            st.warning(T["resize_warn_no_dim"])
+                        else:
+                            df = st.session_state["df_resize"].copy()
+                            mask = df["Modifier"] == True
+                            if not mask.any():
+                                mask = pd.Series([True] * len(df), index=df.index)
+                            if largeur_globale is not None:
+                                df.loc[mask, "Nouvelle largeur"] = float(largeur_globale)
+                            if hauteur_globale is not None:
+                                df.loc[mask, "Nouvelle hauteur"] = float(hauteur_globale)
+                            st.session_state["df_resize"] = df
+                            st.rerun()
+
+                # Tableau
+                st.subheader(T["resize_dashboards_title"])
+                st.caption(T["resize_dashboards_caption"])
+                edited_resize = st.data_editor(
+                    st.session_state["df_resize"],
+                    column_config={
+                        "Modifier":         st.column_config.CheckboxColumn(T["resize_col_check"], width="small"),
+                        "Dashboard":        st.column_config.TextColumn(T["resize_col_dash"], disabled=True),
+                        "Largeur actuelle": st.column_config.TextColumn(T["resize_col_cur_w"], disabled=True, width="small"),
+                        "Hauteur actuelle": st.column_config.TextColumn(T["resize_col_cur_h"], disabled=True, width="small"),
+                        "Nouvelle largeur": st.column_config.NumberColumn(T["resize_col_new_w"], min_value=1, max_value=3000, step=1),
+                        "Nouvelle hauteur": st.column_config.NumberColumn(T["resize_col_new_h"], min_value=1, max_value=6000, step=1),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_resize",
                 )
-            with col_b:
-                hauteur_globale = st.number_input(
-                    T["resize_common_height"], min_value=1, max_value=6000, value=None,
-                    step=1, placeholder="Ex : 1050", key="resize_global_h"
-                )
-            with col_c:
+
+                # Toggles
+                st.divider()
+                col_l, col_r = st.columns(2)
+                with col_l:
+                    deplacer_droite = sac.switch(
+                        label=T["resize_toggle_right"],
+                        description=T["resize_toggle_right_desc"],
+                        value=False, align="start", size="xs", position="left", key="toggle_droite"
+                    )
+                with col_r:
+                    deplacer_bas = sac.switch(
+                        label=T["resize_toggle_down"],
+                        description=T["resize_toggle_down_desc"],
+                        value=False, align="start", size="xs", position="left", key="toggle_bas"
+                    )
+
+                nb_coches_resize = int(edited_resize["Modifier"].sum())
+                s = "s" if nb_coches_resize > 1 else ""
                 st.write("")
-                st.write("")
-                if st.button(T["resize_btn_apply_all"], use_container_width=True, key="resize_apply_all"):
-                    if largeur_globale is None and hauteur_globale is None:
-                        st.warning(T["resize_warn_no_dim"])
+                if st.button(
+                    T["resize_btn"].format(n=nb_coches_resize, s=s),
+                    type="primary",
+                    disabled=nb_coches_resize == 0,
+                    key="btn_resize",
+                ):
+                    selection = edited_resize[edited_resize["Modifier"]]
+                    lignes_ko = selection[
+                        selection["Nouvelle largeur"].isna() | selection["Nouvelle hauteur"].isna()
+                    ]
+                    if not lignes_ko.empty:
+                        st.error(T["resize_error_dims"].format(", ".join(lignes_ko["Dashboard"].tolist())))
                     else:
-                        df = st.session_state["df_resize"].copy()
-                        mask = df["Modifier"] == True
-                        if not mask.any():
-                            mask = pd.Series([True] * len(df), index=df.index)
-                        if largeur_globale is not None:
-                            df.loc[mask, "Nouvelle largeur"] = float(largeur_globale)
-                        if hauteur_globale is not None:
-                            df.loc[mask, "Nouvelle hauteur"] = float(hauteur_globale)
-                        st.session_state["df_resize"] = df
-                        st.rerun()
-
-            # Tableau
-            st.subheader(T["resize_dashboards_title"])
-            st.caption(T["resize_dashboards_caption"])
-            edited_resize = st.data_editor(
-                st.session_state["df_resize"],
-                column_config={
-                    "Modifier":         st.column_config.CheckboxColumn(T["resize_col_check"], width="small"),
-                    "Dashboard":        st.column_config.TextColumn(T["resize_col_dash"], disabled=True),
-                    "Largeur actuelle": st.column_config.TextColumn(T["resize_col_cur_w"], disabled=True, width="small"),
-                    "Hauteur actuelle": st.column_config.TextColumn(T["resize_col_cur_h"], disabled=True, width="small"),
-                    "Nouvelle largeur": st.column_config.NumberColumn(T["resize_col_new_w"], min_value=1, max_value=3000, step=1),
-                    "Nouvelle hauteur": st.column_config.NumberColumn(T["resize_col_new_h"], min_value=1, max_value=6000, step=1),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="editor_resize",
-            )
-
-            # Toggles
-            st.divider()
-            col_l, col_r = st.columns(2)
-            with col_l:
-                deplacer_droite = sac.switch(
-                    label=T["resize_toggle_right"],
-                    description=T["resize_toggle_right_desc"],
-                    value=False, align="start", size="xs", position="left", key="toggle_droite"
-                )
-            with col_r:
-                deplacer_bas = sac.switch(
-                    label=T["resize_toggle_down"],
-                    description=T["resize_toggle_down_desc"],
-                    value=False, align="start", size="xs", position="left", key="toggle_bas"
-                )
-
-            nb_coches_resize = int(edited_resize["Modifier"].sum())
-            s = "s" if nb_coches_resize > 1 else ""
-            st.write("")
-            if st.button(
-                T["resize_btn"].format(n=nb_coches_resize, s=s),
-                type="primary",
-                disabled=nb_coches_resize == 0,
-                key="btn_resize",
-            ):
-                selection = edited_resize[edited_resize["Modifier"]]
-                lignes_ko = selection[
-                    selection["Nouvelle largeur"].isna() | selection["Nouvelle hauteur"].isna()
-                ]
-                if not lignes_ko.empty:
-                    st.error(T["resize_error_dims"].format(", ".join(lignes_ko["Dashboard"].tolist())))
-                else:
-                    modifications = {
-                        row["Dashboard"]: (int(row["Nouvelle largeur"]), int(row["Nouvelle hauteur"]))
-                        for _, row in selection.iterrows()
-                    }
-                    try:
-                        fichier = modifier_tableaux_de_bord(xml_content, modifications, deplacer_droite, deplacer_bas)
-                        st.success(T["resize_success"].format(nb_coches_resize))
-                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
-                        st.download_button(
-                            label=T["resize_download"],
-                            data=fichier,
-                            file_name=f"{nom_base}{T['resize_suffix']}.twb",
-                            mime="application/xml",
-                            key="dl_resize",
-                        )
-                    except ValueError as e:
-                        st.error(str(e))
+                        modifications = {
+                            row["Dashboard"]: (int(row["Nouvelle largeur"]), int(row["Nouvelle hauteur"]))
+                            for _, row in selection.iterrows()
+                        }
+                        try:
+                            fichier = modifier_tableaux_de_bord(xml_content, modifications, deplacer_droite, deplacer_bas)
+                            st.success(T["resize_success"].format(nb_coches_resize))
+                            nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                            st.download_button(
+                                label=T["resize_download"],
+                                data=fichier,
+                                file_name=f"{nom_base}{T['resize_suffix']}.twb",
+                                mime="application/xml",
+                                key="dl_resize",
+                            )
+                        except ValueError as e:
+                            st.error(str(e))
 
 
     # ════════════════════════════════════════════════════
     # ONGLET 2 — FORMATER LES FILTRES
     # ════════════════════════════════════════════════════
     with tab_filtres:
-
-        if "filtres_source" not in st.session_state:
-            filtres = recuperer_filtres(xml_content)
-            st.session_state["filtres_source"] = filtres
-            st.session_state["df_filtres"]     = init_df_filtres(filtres)
-
-        filtres_source = st.session_state["filtres_source"]
-
-        if not filtres_source:
-            st.warning(T["filtres_no_filter"])
+        if _is_tds:
+            st.info(T["tds_not_applicable"])
         else:
-            nb_filtres = len(filtres_source)
-            s = "s" if nb_filtres > 1 else ""
-            st.caption(T["filtres_detected"].format(n=nb_filtres, s=s))
+            if "filtres_source" not in st.session_state:
+                filtres = recuperer_filtres(xml_content)
+                st.session_state["filtres_source"] = filtres
+                st.session_state["df_filtres"]     = init_df_filtres(filtres)
 
-            # Appliquer à tous
-            st.subheader(T["filtres_apply_all_title"])
-            col_a, col_b, col_c = st.columns([2, 1, 1])
-            with col_a:
-                mode_global = st.selectbox(
-                    T["filtres_common_mode"],
-                    options=MODES_LABELS,
-                    index=None,
-                    placeholder=T["filtres_common_mode_ph"],
-                    key="filtres_global_mode",
-                )
-            with col_b:
-                st.write("")
-                apply_global = st.checkbox(T["filtres_apply_btn_col"], value=True, key="filtres_global_apply")
-            with col_c:
-                st.write("")
-                st.write("")
-                if st.button(T["filtres_btn_apply_all"], use_container_width=True, key="filtres_apply_all"):
-                    if mode_global is None:
-                        st.warning(T["filtres_warn_no_mode"])
-                    else:
-                        df = st.session_state["df_filtres"].copy()
-                        mask = df["Modifier"] == True
-                        if not mask.any():
-                            mask = pd.Series([True] * len(df), index=df.index)
-                        df.loc[mask, "Nouveau mode"]      = mode_global
-                        df.loc[mask, "Bouton Appliquer"]  = apply_global
-                        st.session_state["df_filtres"] = df
-                        st.rerun()
+            filtres_source = st.session_state["filtres_source"]
 
-            # Tableau
-            st.subheader(T["filtres_title"])
-            st.caption(T["filtres_caption"])
+            if not filtres_source:
+                st.warning(T["filtres_no_filter"])
+            else:
+                nb_filtres = len(filtres_source)
+                s = "s" if nb_filtres > 1 else ""
+                st.caption(T["filtres_detected"].format(n=nb_filtres, s=s))
 
-            edited_filtres = st.data_editor(
-                st.session_state["df_filtres"],
-                column_config={
-                    "Modifier":         st.column_config.CheckboxColumn(T["filtres_col_check"], width="small"),
-                    "Dashboard":        st.column_config.TextColumn(T["filtres_col_dashboard"], disabled=True, width="medium"),
-                    "Champ":            st.column_config.TextColumn(T["filtres_col_field"], disabled=True, width="medium"),
-                    "Mode actuel":      st.column_config.TextColumn(T["filtres_col_cur_mode"], disabled=True, width="large"),
-                    "Nouveau mode":     st.column_config.SelectboxColumn(
-                        T["filtres_col_new_mode"],
+                # Appliquer à tous
+                st.subheader(T["filtres_apply_all_title"])
+                col_a, col_b, col_c = st.columns([2, 1, 1])
+                with col_a:
+                    mode_global = st.selectbox(
+                        T["filtres_common_mode"],
                         options=MODES_LABELS,
-                        width="large",
-                    ),
-                    "Bouton Appliquer": st.column_config.CheckboxColumn(T["filtres_col_apply_btn"], width="small"),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="editor_filtres",
-            )
-
-            nb_coches_filtres = int(edited_filtres["Modifier"].sum())
-            s = "s" if nb_coches_filtres > 1 else ""
-            st.write("")
-            if st.button(
-                T["filtres_btn"].format(n=nb_coches_filtres, s=s),
-                type="primary",
-                disabled=nb_coches_filtres == 0,
-                key="btn_filtres",
-            ):
-                try:
-                    fichier = appliquer_modifications_filtres(xml_content, edited_filtres, filtres_source)
-                    st.success(T["filtres_success"].format(nb_coches_filtres))
-                    nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
-                    st.download_button(
-                        label=T["filtres_download"],
-                        data=fichier,
-                        file_name=f"{nom_base}{T['filtres_suffix']}.twb",
-                        mime="application/xml",
-                        key="dl_filtres",
+                        index=None,
+                        placeholder=T["filtres_common_mode_ph"],
+                        key="filtres_global_mode",
                     )
-                except ValueError as e:
-                    st.error(str(e))
+                with col_b:
+                    st.write("")
+                    apply_global = st.checkbox(T["filtres_apply_btn_col"], value=True, key="filtres_global_apply")
+                with col_c:
+                    st.write("")
+                    st.write("")
+                    if st.button(T["filtres_btn_apply_all"], use_container_width=True, key="filtres_apply_all"):
+                        if mode_global is None:
+                            st.warning(T["filtres_warn_no_mode"])
+                        else:
+                            df = st.session_state["df_filtres"].copy()
+                            mask = df["Modifier"] == True
+                            if not mask.any():
+                                mask = pd.Series([True] * len(df), index=df.index)
+                            df.loc[mask, "Nouveau mode"]      = mode_global
+                            df.loc[mask, "Bouton Appliquer"]  = apply_global
+                            st.session_state["df_filtres"] = df
+                            st.rerun()
+
+                # Tableau
+                st.subheader(T["filtres_title"])
+                st.caption(T["filtres_caption"])
+
+                edited_filtres = st.data_editor(
+                    st.session_state["df_filtres"],
+                    column_config={
+                        "Modifier":         st.column_config.CheckboxColumn(T["filtres_col_check"], width="small"),
+                        "Dashboard":        st.column_config.TextColumn(T["filtres_col_dashboard"], disabled=True, width="medium"),
+                        "Champ":            st.column_config.TextColumn(T["filtres_col_field"], disabled=True, width="medium"),
+                        "Mode actuel":      st.column_config.TextColumn(T["filtres_col_cur_mode"], disabled=True, width="large"),
+                        "Nouveau mode":     st.column_config.SelectboxColumn(
+                            T["filtres_col_new_mode"],
+                            options=MODES_LABELS,
+                            width="large",
+                        ),
+                        "Bouton Appliquer": st.column_config.CheckboxColumn(T["filtres_col_apply_btn"], width="small"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_filtres",
+                )
+
+                nb_coches_filtres = int(edited_filtres["Modifier"].sum())
+                s = "s" if nb_coches_filtres > 1 else ""
+                st.write("")
+                if st.button(
+                    T["filtres_btn"].format(n=nb_coches_filtres, s=s),
+                    type="primary",
+                    disabled=nb_coches_filtres == 0,
+                    key="btn_filtres",
+                ):
+                    try:
+                        fichier = appliquer_modifications_filtres(xml_content, edited_filtres, filtres_source)
+                        st.success(T["filtres_success"].format(nb_coches_filtres))
+                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        st.download_button(
+                            label=T["filtres_download"],
+                            data=fichier,
+                            file_name=f"{nom_base}{T['filtres_suffix']}.twb",
+                            mime="application/xml",
+                            key="dl_filtres",
+                        )
+                    except ValueError as e:
+                        st.error(str(e))
 
 
     # ════════════════════════════════════════════════════
@@ -487,11 +493,12 @@ def main():
                         s = "s" if nb_tab > 1 else ""
                         msgs.append(T["conn_ok_tables"].format(n=nb_tab, s=s))
                     st.success("✅ " + " · ".join(msgs) + ".")
-                    nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                    nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
+                    nom_ext  = ".tds" if _is_tds else ".twb"
                     st.download_button(
                         label=T["conn_download"],
                         data=xml_modifie,
-                        file_name=f"{nom_base}{T['conn_suffix']}.twb",
+                        file_name=f"{nom_base}{T['conn_suffix']}{nom_ext}",
                         mime="application/xml",
                         key="dl_connexion",
                     )
