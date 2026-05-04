@@ -337,6 +337,27 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
             if table_act in oid_attr:
                 obj.set("id", oid_attr.replace(table_act, table_cib))
 
+        # <local-name>[champ (table_actuelle)]</local-name>
+        # dans les metadata-records multi-tables
+        for ln in root.iter("local-name"):
+            if ln.text and f"({table_act})" in ln.text:
+                ln.text = ln.text.replace(f"({table_act})", f"({table_cib})")
+
+        # <column name="[champ (table_actuelle)]"
+        #         caption="Champ (Table Actuelle Title)">
+        # colonnes de datasource (pas datatype="table")
+        title_act = table_act.replace("_", " ").title()
+        title_cib = table_cib.replace("_", " ").title()
+        for col in root.iter("column"):
+            if col.get("datatype") == "table":
+                continue
+            nm = col.get("name", "")
+            if f"({table_act})" in nm:
+                col.set("name", nm.replace(f"({table_act})", f"({table_cib})"))
+            cap = col.get("caption", "")
+            if f"({title_act})" in cap:
+                col.set("caption", cap.replace(f"({title_act})", f"({title_cib})"))
+
     if nb == 0:
         raise ValueError("Aucune occurrence trouvée dans le fichier.")
 
