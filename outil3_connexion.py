@@ -78,15 +78,15 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
             )
 
     # Met à jour le catalogue dans l'attribut table='[catalog].[schema].[table]'
-    # de tous les <relation type='table'> (y compris dans <object-graph>).
+    # sur TOUS les éléments de type 'table' (couvre aussi les tags _.fcp...).
     old_prefix = f"[{catalogue_source}]."
     new_prefix = f"[{catalogue_cible}]."
-    for rel in root.iter("relation"):
-        if rel.get("type") != "table":
+    for elem in root.iter():
+        if elem.get("type") != "table":
             continue
-        attr = rel.get("table", "")
+        attr = elem.get("table", "")
         if attr.startswith(old_prefix):
-            rel.set("table", new_prefix + attr[len(old_prefix):])
+            elem.set("table", new_prefix + attr[len(old_prefix):])
 
     # Met à jour le caption des datasources qui contiennent le catalogue.
     for ds in root.iter("datasource"):
@@ -223,11 +223,14 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
         else:
             attr_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
 
-    for rel in root.iter("relation"):
-        rel_type = rel.get("type")
+    # Itère TOUS les éléments pour couvrir aussi les tags Tableau de type
+    # <_.fcp.ObjectModelXxx.true...relation> qui ont type='table' ou type='text'
+    # mais dont le nom de tag diffère de 'relation'.
+    for elem in root.iter():
+        rel_type = elem.get("type")
 
-        if rel_type == "text" and rel.text and sql_map:
-            sql = rel.text
+        if rel_type == "text" and elem.text and sql_map:
+            sql = elem.text
             for (schema, table_act), table_cib in sql_map.items():
                 pattern = re.compile(
                     r'((?:FROM|JOIN)\s+' + re.escape(schema) + r'\.)'
@@ -239,10 +242,10 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
                 if n:
                     sql = nouveau_sql
                     nb += n
-            rel.text = sql
+            elem.text = sql
 
         elif rel_type == "table" and attr_map:
-            attr = rel.get("table", "")
+            attr = elem.get("table", "")
             m_re = _RE_ATTR_TABLE.match(attr)
             if m_re:
                 catalog = m_re.group(1) or ""
@@ -252,17 +255,32 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
                 if key in attr_map:
                     table_cib = attr_map[key]
                     if catalog:
-                        rel.set("table", f"[{catalog}].[{schema}].[{table_cib}]")
+                        elem.set("table", f"[{catalog}].[{schema}].[{table_cib}]")
                     else:
-                        rel.set("table", f"[{schema}].[{table_cib}]")
+                        elem.set("table", f"[{schema}].[{table_cib}]")
                     nb += 1
 
-            name = rel.get("name", "")
+            name = elem.get("name", "")
             for modif in modifs:
                 if modif["Type"] == "Table directe" and name == modif["Table actuelle"]:
-                    rel.set("name", modif["Table cible"])
+                    elem.set("name", modif["Table cible"])
                     nb += 1
                     break
+
+    # Met à jour les <map key='[champ (table)]' value='[table].[champ]'>
+    # dans la section <cols> (multi-tables).
+    for modif in [m for m in modifs if m["Type"] == "Table directe"]:
+        table_act = modif["Table actuelle"]
+        table_cib = modif["Table cible"]
+        for mp in root.iter("map"):
+            key = mp.get("key", "")
+            val = mp.get("value", "")
+            # key : '[champ (table_act)]' → '[champ (table_cib)]'
+            if f"({table_act})" in key:
+                mp.set("key", key.replace(f"({table_act})", f"({table_cib})"))
+            # value : '[table_act].[champ]' → '[table_cib].[champ]'
+            if val.startswith(f"[{table_act}]."):
+                mp.set("value", f"[{table_cib}]." + val[len(f"[{table_act}]."):])
 
     # Pour les tables directes : met à jour <parent-name> et <object-id>
     # dans les metadata-records.
