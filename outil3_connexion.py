@@ -42,21 +42,25 @@ def recuperer_catalogues(xml_content: bytes) -> list:
     return connexions
 
 
-def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
+def remplacer_catalogue(xml_content, catalogue_source: str,
                         catalogue_cible: str) -> tuple:
     """
-    Remplace catalogue_source par catalogue_cible dans l'attribut 'dbname'
-    de tous les éléments <connection class='databricks'> du fichier TWB.
+    Remplace catalogue_source par catalogue_cible dans le fichier TWB.
 
-    Retourne (BytesIO, nb_remplacements).
-    Lève ValueError si aucune occurrence n'est trouvée ou si les arguments
-    sont invalides.
+    Stratégie en deux temps :
+    1. Mise à jour XML-aware de l'attribut dbname (connexion Databricks).
+    2. Remplacement textuel exhaustif sur le XML sérialisé pour couvrir
+       tous les autres contextes : table=, object-id, id, caption, name…
+       y compris les tags non-standards _.fcp... et les attributs object-id.
+
+    Retourne (BytesIO, nb_connexions_modifiées).
     """
     if not catalogue_source or not catalogue_cible:
         raise ValueError("Le catalogue source et le catalogue cible ne peuvent pas être vides.")
     if catalogue_source == catalogue_cible:
         raise ValueError("Le catalogue source et le catalogue cible sont identiques.")
 
+    # ── 1. Mise à jour XML du dbname ───────────────────────────────────────
     tree = parser_xml(xml_content)
     root = tree.getroot()
     nb = 0
@@ -68,53 +72,26 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
             conn.set("dbname", catalogue_cible)
             nb += 1
 
-    # Met à jour le catalogue dans les <object-id> des metadata-records.
-    # Format : [table (catalog.schema.table)_HASH]
-    for oid in root.iter("object-id"):
-        if oid.text and catalogue_source in oid.text:
-            oid.text = oid.text.replace(
-                f"({catalogue_source}.",
-                f"({catalogue_cible}.",
-            )
-
-    # Met à jour le catalogue dans l'attribut table='[catalog].[schema].[table]'
-    # sur TOUS les éléments de type 'table' (couvre aussi les tags _.fcp...).
-    old_prefix = f"[{catalogue_source}]."
-    new_prefix = f"[{catalogue_cible}]."
-    for elem in root.iter():
-        if elem.get("type") != "table":
-            continue
-        attr = elem.get("table", "")
-        if attr.startswith(old_prefix):
-            elem.set("table", new_prefix + attr[len(old_prefix):])
-
-    # Met à jour le caption des datasources qui contiennent le catalogue.
-    for ds in root.iter("datasource"):
-        caption = ds.get("caption", "")
-        if catalogue_source in caption:
-            ds.set("caption", caption.replace(catalogue_source, catalogue_cible))
-
-    # <column datatype="table" name="[__tableau_internal_object_id__].[table (cat.schema.table)_HASH]">
-    for col in root.iter("column"):
-        if col.get("datatype") != "table":
-            continue
-        nm = col.get("name", "")
-        if catalogue_source in nm:
-            col.set("name", nm.replace(catalogue_source, catalogue_cible))
-
-    # <object id="table (cat.schema.table)_HASH"> dans <object-graph>
-    for obj in root.iter("object"):
-        oid_attr = obj.get("id", "")
-        if catalogue_source in oid_attr:
-            obj.set("id", oid_attr.replace(catalogue_source, catalogue_cible))
-
     if nb == 0:
         raise ValueError(
             f"Aucune connexion Databricks avec le catalogue « {catalogue_source} » "
             "trouvée dans ce fichier."
         )
 
-    return serialiser_xml(tree), nb
+    # ── 2. Remplacement textuel pour tout le reste ─────────────────────────
+    # Les deux seuls contextes où le catalogue apparaît dans un TWB :
+    #   [catalogue].[schema].[table]  →  préfixe entre crochets
+    #   (catalogue.schema.table)_HASH →  entre parenthèse dans object-id / id
+    # Couvre : <relation table=>, <_.fcp...relation>, <object id=>,
+    #   <_.fcp...object id=>, <first/second-end-point object-id=>,
+    #   <object-id> texte, <column name=>, <datasource caption=>, etc.
+    texte = serialiser_xml(tree).getvalue().decode("utf-8")
+    texte = texte.replace(f"[{catalogue_source}].", f"[{catalogue_cible}].")
+    texte = texte.replace(f"({catalogue_source}.", f"({catalogue_cible}.")
+
+    from io import BytesIO as _BytesIO
+    return _BytesIO(texte.encode("utf-8")), nb
+
 
 
 # ─────────────────────────────────────────────────────────────
