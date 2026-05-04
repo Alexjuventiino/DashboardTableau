@@ -278,8 +278,14 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             for dep in dash_elem.findall('datasource-dependencies'):
                 if dep.get('datasource', '') == ds_name:
                     return dep
-            dep = ET.SubElement(dash_elem, 'datasource-dependencies')
+            # Doit être inséré AVANT <zones> (exigence du schéma Tableau)
+            zones_idx = next(
+                (i for i, c in enumerate(dash_elem) if c.tag == 'zones'),
+                len(list(dash_elem)),
+            )
+            dep = ET.Element('datasource-dependencies')
             dep.set('datasource', ds_name)
+            dash_elem.insert(zones_idx, dep)
             return dep
 
         panel = _trouver_panneau_filtres(dash_elem)
@@ -316,7 +322,13 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
                 for k, v in fi['instance_attribs'].items():
                     ci_el.set(k, v)
 
-            z = ET.SubElement(panel, 'zone')
+            # Insérer AVANT <zone-style> (doit rester le dernier enfant)
+            zone_style_idx = next(
+                (i for i, c in enumerate(panel) if c.tag == 'zone-style'),
+                len(list(panel)),
+            )
+            z = ET.Element('zone')
+            panel.insert(zone_style_idx, z)
             z.set('h', '6222')
             z.set('id', str(next_id))
             next_id += 1
