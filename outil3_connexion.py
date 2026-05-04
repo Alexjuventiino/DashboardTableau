@@ -171,11 +171,18 @@ def recuperer_tables_sql(xml_content: bytes) -> list:
 
         elif rel_type == "table":
             attr = rel.get("table", "")
+            # Ignore les relations de l'extrait Hyper : table='[Extract].[...]'
+            if attr.startswith("[Extract]."):
+                continue
             m = _RE_ATTR_TABLE.match(attr)
             if m:
                 catalog = m.group(1) or ""
                 schema  = m.group(2)
                 table   = m.group(3)
+                # Double-vérification sur le schéma (couvre les cas où le préfixe
+                # [Extract]. serait absent mais le schéma reste 'Extract')
+                if schema.lower() == "extract":
+                    continue
                 cle = ("attr", catalog, schema, table)
                 if cle not in vues:
                     vues.add(cle)
