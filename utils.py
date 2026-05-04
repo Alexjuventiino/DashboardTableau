@@ -19,8 +19,11 @@ def charger_contenu_xml(uploaded_file) -> bytes:
     return raw
 
 
-def parser_xml(xml_content: bytes) -> ET.ElementTree:
+def parser_xml(xml_content) -> ET.ElementTree:
     try:
+        if hasattr(xml_content, "read"):
+            xml_content.seek(0)
+            return ET.parse(xml_content)
         return ET.parse(BytesIO(xml_content))
     except ET.ParseError as e:
         raise ValueError(f"Le fichier XML est malformé : {e}")
