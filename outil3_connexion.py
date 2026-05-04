@@ -94,6 +94,20 @@ def remplacer_catalogue(xml_content: bytes, catalogue_source: str,
         if catalogue_source in caption:
             ds.set("caption", caption.replace(catalogue_source, catalogue_cible))
 
+    # <column datatype="table" name="[__tableau_internal_object_id__].[table (cat.schema.table)_HASH]">
+    for col in root.iter("column"):
+        if col.get("datatype") != "table":
+            continue
+        nm = col.get("name", "")
+        if catalogue_source in nm:
+            col.set("name", nm.replace(catalogue_source, catalogue_cible))
+
+    # <object id="table (cat.schema.table)_HASH"> dans <object-graph>
+    for obj in root.iter("object"):
+        oid_attr = obj.get("id", "")
+        if catalogue_source in oid_attr:
+            obj.set("id", oid_attr.replace(catalogue_source, catalogue_cible))
+
     if nb == 0:
         raise ValueError(
             f"Aucune connexion Databricks avec le catalogue « {catalogue_source} » "
@@ -198,13 +212,16 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
 
     # Deux maps selon le type de relation
     sql_map  = {}   # (schema, table_actuelle) → table_cible
-    attr_map = {}   # (catalog, schema, table_actuelle) → table_cible
+    attr_map = {}   # (schema, table_actuelle) → table_cible
+    # Le catalogue n'est PAS inclus dans la clé : remplacer_catalogue peut
+    # l'avoir déjà modifié dans l'attribut table='[cat].[schema].[table]'
+    # avant que remplacer_tables ne soit appelé.
 
     for m in modifs:
         if m["Type"] == "SQL":
             sql_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
         else:
-            attr_map[(m["Catalogue"], m["Schéma"], m["Table actuelle"])] = m["Table cible"]
+            attr_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
 
     for rel in root.iter("relation"):
         rel_type = rel.get("type")
@@ -231,7 +248,7 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
                 catalog = m_re.group(1) or ""
                 schema  = m_re.group(2)
                 table   = m_re.group(3)
-                key = (catalog, schema, table)
+                key = (schema, table)
                 if key in attr_map:
                     table_cib = attr_map[key]
                     if catalog:
@@ -278,6 +295,29 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
             caption = ds.get("caption", "")
             if table_act in caption:
                 ds.set("caption", caption.replace(table_act, table_cib))
+
+        # <column datatype="table" caption="table_actuelle"
+        #         name="[__tableau_internal_object_id__].[table_actuelle (...)]">
+        for col in root.iter("column"):
+            if col.get("datatype") != "table":
+                continue
+            cap = col.get("caption", "")
+            if cap == table_act:
+                col.set("caption", table_cib)
+            nm = col.get("name", "")
+            if table_act in nm:
+                col.set("name", nm.replace(table_act, table_cib))
+
+        # <object caption="table_actuelle"
+        #         id="table_actuelle (catalog.schema.table_actuelle)_HASH">
+        # dans <object-graph>
+        for obj in root.iter("object"):
+            cap = obj.get("caption", "")
+            if cap == table_act:
+                obj.set("caption", table_cib)
+            oid_attr = obj.get("id", "")
+            if table_act in oid_attr:
+                obj.set("id", oid_attr.replace(table_act, table_cib))
 
     if nb == 0:
         raise ValueError("Aucune occurrence trouvée dans le fichier.")
