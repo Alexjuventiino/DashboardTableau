@@ -171,6 +171,9 @@ def recuperer_tables_sql(xml_content: bytes) -> list:
 
         elif rel_type == "table":
             attr = rel.get("table", "")
+            # Ignore les relations de l'extrait Hyper : table='[Extract].[...]'
+            if attr.startswith("[Extract]."):
+                continue
             m = _RE_ATTR_TABLE.match(attr)
             if m:
                 catalog = m.group(1) or ""

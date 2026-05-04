@@ -10,6 +10,7 @@ from outil3_connexion import (
     recuperer_tables_sql, init_df_tables, remplacer_tables,
     remplacer_serveur,
 )
+from translations import TRANSLATIONS
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -17,10 +18,25 @@ from outil3_connexion import (
 # ═══════════════════════════════════════════════════════════════
 
 def main():
-    st.title("🧰 Boîte à outils Tableau")
+    # ── Sélecteur de langue ────────────────────────────────────────
+    _col_title, _col_lang = st.columns([5, 1])
+    with _col_lang:
+        st.write("")
+        _choice = st.radio(
+            "",
+            options=["🇫🇷 FR", "🇬🇧 EN"],
+            horizontal=True,
+            key="lang_radio",
+            label_visibility="collapsed",
+        )
+    lang = "en" if "EN" in _choice else "fr"
+    T = TRANSLATIONS[lang]
+
+    with _col_title:
+        st.title(T["title"])
 
     # Upload unique partagé entre les onglets
-    xml_file = st.file_uploader("Uploader le fichier .twb ou .twbx", type=["twb", "twbx"])
+    xml_file = st.file_uploader(T["upload_label"], type=["twb", "twbx"])
 
     if xml_file is None:
         return
@@ -29,7 +45,7 @@ def main():
         xml_content = charger_contenu_xml(xml_file)
         parser_xml(xml_content)  # validation
     except ValueError as e:
-        st.error(f"❌ Impossible de lire le fichier : {e}")
+        st.error(T["upload_error"].format(e))
         return
 
     # Réinitialiser si le fichier change
@@ -39,7 +55,7 @@ def main():
         st.session_state["fichier_actuel"] = xml_file.name
 
     st.divider()
-    tab_resize, tab_filtres, tab_connexion = st.tabs(["📐 Redimensionner", "🔽 Formater les filtres", "🔌 Changer la connexion"])
+    tab_resize, tab_filtres, tab_connexion = st.tabs([T["tab_resize"], T["tab_filters"], T["tab_connexion"]])
 
 
     # ════════════════════════════════════════════════════
@@ -48,30 +64,30 @@ def main():
     with tab_resize:
         dashboards = recuperer_dashboards_avec_tailles(xml_content)
         if not dashboards:
-            st.warning("Aucun dashboard trouvé dans ce fichier.")
+            st.warning(T["resize_no_dashboard"])
         else:
             if "df_resize" not in st.session_state:
                 st.session_state["df_resize"] = init_df_resize(dashboards)
 
             # Appliquer à tous
-            st.subheader("Appliquer à tous les dashboards cochés")
+            st.subheader(T["resize_apply_all_title"])
             col_a, col_b, col_c = st.columns([1, 1, 1])
             with col_a:
                 largeur_globale = st.number_input(
-                    "Largeur commune", min_value=1, max_value=3000, value=None,
+                    T["resize_common_width"], min_value=1, max_value=3000, value=None,
                     step=1, placeholder="Ex : 1600", key="resize_global_w"
                 )
             with col_b:
                 hauteur_globale = st.number_input(
-                    "Hauteur commune", min_value=1, max_value=6000, value=None,
+                    T["resize_common_height"], min_value=1, max_value=6000, value=None,
                     step=1, placeholder="Ex : 1050", key="resize_global_h"
                 )
             with col_c:
                 st.write("")
                 st.write("")
-                if st.button("↓ Appliquer à tous", use_container_width=True, key="resize_apply_all"):
+                if st.button(T["resize_btn_apply_all"], use_container_width=True, key="resize_apply_all"):
                     if largeur_globale is None and hauteur_globale is None:
-                        st.warning("Renseigne au moins une dimension commune.")
+                        st.warning(T["resize_warn_no_dim"])
                     else:
                         df = st.session_state["df_resize"].copy()
                         mask = df["Modifier"] == True
@@ -85,17 +101,17 @@ def main():
                         st.rerun()
 
             # Tableau
-            st.subheader("Dashboards")
-            st.caption("Cochez les dashboards à modifier et renseignez les nouvelles dimensions.")
+            st.subheader(T["resize_dashboards_title"])
+            st.caption(T["resize_dashboards_caption"])
             edited_resize = st.data_editor(
                 st.session_state["df_resize"],
                 column_config={
-                    "Modifier":         st.column_config.CheckboxColumn("Modifier", width="small"),
-                    "Dashboard":        st.column_config.TextColumn("Dashboard", disabled=True),
-                    "Largeur actuelle": st.column_config.TextColumn("Largeur act.", disabled=True, width="small"),
-                    "Hauteur actuelle": st.column_config.TextColumn("Hauteur act.", disabled=True, width="small"),
-                    "Nouvelle largeur": st.column_config.NumberColumn("Nouvelle largeur", min_value=1, max_value=3000, step=1),
-                    "Nouvelle hauteur": st.column_config.NumberColumn("Nouvelle hauteur", min_value=1, max_value=6000, step=1),
+                    "Modifier":         st.column_config.CheckboxColumn(T["resize_col_check"], width="small"),
+                    "Dashboard":        st.column_config.TextColumn(T["resize_col_dash"], disabled=True),
+                    "Largeur actuelle": st.column_config.TextColumn(T["resize_col_cur_w"], disabled=True, width="small"),
+                    "Hauteur actuelle": st.column_config.TextColumn(T["resize_col_cur_h"], disabled=True, width="small"),
+                    "Nouvelle largeur": st.column_config.NumberColumn(T["resize_col_new_w"], min_value=1, max_value=3000, step=1),
+                    "Nouvelle hauteur": st.column_config.NumberColumn(T["resize_col_new_h"], min_value=1, max_value=6000, step=1),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -107,21 +123,22 @@ def main():
             col_l, col_r = st.columns(2)
             with col_l:
                 deplacer_droite = sac.switch(
-                    label="Déplacer vers la droite",
-                    description="Repositionne les objets lors d'un agrandissement horizontal",
+                    label=T["resize_toggle_right"],
+                    description=T["resize_toggle_right_desc"],
                     value=False, align="start", size="xs", position="left", key="toggle_droite"
                 )
             with col_r:
                 deplacer_bas = sac.switch(
-                    label="Déplacer vers le bas",
-                    description="Repositionne les objets lors d'un agrandissement vertical",
+                    label=T["resize_toggle_down"],
+                    description=T["resize_toggle_down_desc"],
                     value=False, align="start", size="xs", position="left", key="toggle_bas"
                 )
 
             nb_coches_resize = int(edited_resize["Modifier"].sum())
+            s = "s" if nb_coches_resize > 1 else ""
             st.write("")
             if st.button(
-                f"Modifier ({nb_coches_resize} dashboard{'s' if nb_coches_resize > 1 else ''} sélectionné{'s' if nb_coches_resize > 1 else ''})",
+                T["resize_btn"].format(n=nb_coches_resize, s=s),
                 type="primary",
                 disabled=nb_coches_resize == 0,
                 key="btn_resize",
@@ -131,7 +148,7 @@ def main():
                     selection["Nouvelle largeur"].isna() | selection["Nouvelle hauteur"].isna()
                 ]
                 if not lignes_ko.empty:
-                    st.error(f"Dimensions manquantes pour : **{', '.join(lignes_ko['Dashboard'].tolist())}**")
+                    st.error(T["resize_error_dims"].format(", ".join(lignes_ko["Dashboard"].tolist())))
                 else:
                     modifications = {
                         row["Dashboard"]: (int(row["Nouvelle largeur"]), int(row["Nouvelle hauteur"]))
@@ -139,12 +156,12 @@ def main():
                     }
                     try:
                         fichier = modifier_tableaux_de_bord(xml_content, modifications, deplacer_droite, deplacer_bas)
-                        st.success(f"✅ {nb_coches_resize} dashboard(s) modifié(s).")
+                        st.success(T["resize_success"].format(nb_coches_resize))
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                         st.download_button(
-                            label="⬇️ Télécharger le fichier modifié",
+                            label=T["resize_download"],
                             data=fichier,
-                            file_name=f"{nom_base}_redimensionné.twb",
+                            file_name=f"{nom_base}{T['resize_suffix']}.twb",
                             mime="application/xml",
                             key="dl_resize",
                         )
@@ -165,31 +182,32 @@ def main():
         filtres_source = st.session_state["filtres_source"]
 
         if not filtres_source:
-            st.warning("Aucun filtre de dashboard trouvé dans ce fichier.")
+            st.warning(T["filtres_no_filter"])
         else:
             nb_filtres = len(filtres_source)
-            st.caption(f"{nb_filtres} filtre{'s' if nb_filtres > 1 else ''} détecté{'s' if nb_filtres > 1 else ''} dans le fichier.")
+            s = "s" if nb_filtres > 1 else ""
+            st.caption(T["filtres_detected"].format(n=nb_filtres, s=s))
 
             # Appliquer à tous
-            st.subheader("Appliquer à tous les filtres cochés")
+            st.subheader(T["filtres_apply_all_title"])
             col_a, col_b, col_c = st.columns([2, 1, 1])
             with col_a:
                 mode_global = st.selectbox(
-                    "Mode commun",
+                    T["filtres_common_mode"],
                     options=MODES_LABELS,
                     index=None,
-                    placeholder="Choisir un mode...",
+                    placeholder=T["filtres_common_mode_ph"],
                     key="filtres_global_mode",
                 )
             with col_b:
                 st.write("")
-                apply_global = st.checkbox("Bouton Appliquer", value=True, key="filtres_global_apply")
+                apply_global = st.checkbox(T["filtres_apply_btn_col"], value=True, key="filtres_global_apply")
             with col_c:
                 st.write("")
                 st.write("")
-                if st.button("↓ Appliquer à tous", use_container_width=True, key="filtres_apply_all"):
+                if st.button(T["filtres_btn_apply_all"], use_container_width=True, key="filtres_apply_all"):
                     if mode_global is None:
-                        st.warning("Sélectionne un mode commun avant d'appliquer.")
+                        st.warning(T["filtres_warn_no_mode"])
                     else:
                         df = st.session_state["df_filtres"].copy()
                         mask = df["Modifier"] == True
@@ -201,22 +219,22 @@ def main():
                         st.rerun()
 
             # Tableau
-            st.subheader("Filtres")
-            st.caption("Cochez les filtres à modifier, choisissez le nouveau mode et activez le bouton Appliquer si besoin.")
+            st.subheader(T["filtres_title"])
+            st.caption(T["filtres_caption"])
 
             edited_filtres = st.data_editor(
                 st.session_state["df_filtres"],
                 column_config={
-                    "Modifier":         st.column_config.CheckboxColumn("Modifier", width="small"),
-                    "Dashboard":        st.column_config.TextColumn("Dashboard", disabled=True, width="medium"),
-                    "Champ":            st.column_config.TextColumn("Champ", disabled=True, width="medium"),
-                    "Mode actuel":      st.column_config.TextColumn("Mode actuel", disabled=True, width="large"),
+                    "Modifier":         st.column_config.CheckboxColumn(T["filtres_col_check"], width="small"),
+                    "Dashboard":        st.column_config.TextColumn(T["filtres_col_dashboard"], disabled=True, width="medium"),
+                    "Champ":            st.column_config.TextColumn(T["filtres_col_field"], disabled=True, width="medium"),
+                    "Mode actuel":      st.column_config.TextColumn(T["filtres_col_cur_mode"], disabled=True, width="large"),
                     "Nouveau mode":     st.column_config.SelectboxColumn(
-                        "Nouveau mode",
+                        T["filtres_col_new_mode"],
                         options=MODES_LABELS,
                         width="large",
                     ),
-                    "Bouton Appliquer": st.column_config.CheckboxColumn("Bouton Appliquer", width="small"),
+                    "Bouton Appliquer": st.column_config.CheckboxColumn(T["filtres_col_apply_btn"], width="small"),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -224,21 +242,22 @@ def main():
             )
 
             nb_coches_filtres = int(edited_filtres["Modifier"].sum())
+            s = "s" if nb_coches_filtres > 1 else ""
             st.write("")
             if st.button(
-                f"Modifier ({nb_coches_filtres} filtre{'s' if nb_coches_filtres > 1 else ''} sélectionné{'s' if nb_coches_filtres > 1 else ''})",
+                T["filtres_btn"].format(n=nb_coches_filtres, s=s),
                 type="primary",
                 disabled=nb_coches_filtres == 0,
                 key="btn_filtres",
             ):
                 try:
                     fichier = appliquer_modifications_filtres(xml_content, edited_filtres, filtres_source)
-                    st.success(f"✅ {nb_coches_filtres} filtre(s) modifié(s).")
+                    st.success(T["filtres_success"].format(nb_coches_filtres))
                     nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                     st.download_button(
-                        label="⬇️ Télécharger le fichier modifié",
+                        label=T["filtres_download"],
                         data=fichier,
-                        file_name=f"{nom_base}_filtres.twb",
+                        file_name=f"{nom_base}{T['filtres_suffix']}.twb",
                         mime="application/xml",
                         key="dl_filtres",
                     )
@@ -259,63 +278,54 @@ def main():
         catalogues = st.session_state["catalogues"]
 
         if not catalogues:
-            st.warning("Aucune connexion avec un catalogue Databricks détectée dans ce fichier.")
+            st.warning(T["conn_no_databricks"])
         else:
+            conn_ref = catalogues[0]
+
             # ── Connexions détectées ────────────────────────────
-            st.subheader("Connexions détectées")
+            st.subheader(T["conn_detected_title"])
             for c in catalogues:
                 st.markdown(
-                    f"- **Catalogue :** `{c['catalog']}`"
-                    + (f"  |  **Serveur :** `{c['server']}`" if c['server'] else "")
-                    + (f"  |  **Schéma :** `{c['schema']}`" if c['schema'] else "")
+                    f"- **{T['conn_lbl_catalog']}** `{c['catalog']}`"
+                    + (f"  |  **{T['conn_lbl_server']}** `{c['server']}`" if c['server'] else "")
+                    + (f"  |  **{T['conn_lbl_schema']}** `{c['schema']}`" if c['schema'] else "")
                 )
 
-            # ── Catalogue ──────────────────────────────────────
+            # ── 1 — Serveur / chemin HTTP ───────────────────────
             st.divider()
-            st.subheader("1 — Remplacer le catalogue")
+            st.subheader(T["conn_server_title"])
 
-            catalogues_uniques = [c["catalog"] for c in catalogues]
-            catalogue_source = st.selectbox(
-                "Catalogue à remplacer",
-                options=catalogues_uniques,
-                key="conn_source",
-            )
-            catalogue_cible = st.text_input(
-                "Nouveau catalogue cible",
-                placeholder="Ex : datalake_insight_analytics",
-                key="conn_cible",
-            )
-
-            # ── Serveur / chemin HTTP ───────────────────────────
-            st.divider()
-            st.subheader("2 — Serveur / chemin HTTP")
-
-            _ENVS = {
-                "Exploration (préprod/dev)": {
+            _ENV_KEYS = ["exploration", "indus", "custom"]
+            _ENV_LABELS = {
+                "exploration": T["conn_env_exploration"],
+                "indus":       T["conn_env_indus"],
+                "custom":      T["conn_env_custom"],
+            }
+            _ENV_DATA = {
+                "exploration": {
                     "server":    "decathlon-dataplatform-exploration.cloud.databricks.com",
                     "http_path": "/sql/1.0/warehouses/e71fadc53501a3f1",
                 },
-                "Indus (prod)": {
+                "indus": {
                     "server":    "decathlon-dataplatform-indus.cloud.databricks.com",
                     "http_path": "/sql/1.0/warehouses/a978e5a19876d1b6",
                 },
-                "Personnalisé": None,
+                "custom": None,
             }
 
-            conn_ref = catalogues[0]
-
             preset = st.radio(
-                "Environnement cible",
-                options=list(_ENVS.keys()),
+                T["conn_env_label"],
+                options=_ENV_KEYS,
+                format_func=lambda k: _ENV_LABELS[k],
                 horizontal=True,
                 key="conn_env_preset",
             )
 
             # Quand le preset change, on écrase les valeurs dans session_state
             # avant que les text_input soient rendus.
-            if _ENVS[preset] is not None:
-                _default_srv  = _ENVS[preset]["server"]
-                _default_http = _ENVS[preset]["http_path"]
+            if _ENV_DATA[preset] is not None:
+                _default_srv  = _ENV_DATA[preset]["server"]
+                _default_http = _ENV_DATA[preset]["http_path"]
             else:
                 _default_srv  = conn_ref["server"]
                 _default_http = conn_ref["http_path"]
@@ -329,44 +339,57 @@ def main():
             col_srv, col_http = st.columns(2)
             with col_srv:
                 serveur_cible = st.text_input(
-                    "Nom d'hôte du serveur",
+                    T["conn_server_input"],
                     key="conn_server_cible",
                 )
             with col_http:
                 http_path_cible = st.text_input(
-                    "Chemin HTTP (v-http-path)",
+                    T["conn_http_input"],
                     key="conn_http_cible",
                 )
 
-            # ── Tables ─────────────────────────────────────────
+            # ── 2 — Catalogue ──────────────────────────────────
             st.divider()
-            st.subheader("3 — Renommer les tables")
-            st.caption(
-                "Cochez les tables à renommer et éditez le nom cible. "
-                "Le champ suffixe permet de pré-remplir automatiquement toutes les lignes correspondantes."
+            st.subheader(T["conn_catalog_title"])
+
+            catalogues_uniques = [c["catalog"] for c in catalogues]
+            catalogue_source = st.selectbox(
+                T["conn_catalog_source"],
+                options=catalogues_uniques,
+                key="conn_source",
             )
+            catalogue_cible = st.text_input(
+                T["conn_catalog_target"],
+                placeholder=T["conn_catalog_ph"],
+                key="conn_cible",
+            )
+
+            # ── 3 — Tables ─────────────────────────────────────
+            st.divider()
+            st.subheader(T["conn_tables_title"])
+            st.caption(T["conn_tables_caption"])
 
             tables_sql = st.session_state.get("tables_sql", [])
             if not tables_sql:
-                st.info("Aucune table détectée dans le fichier.")
+                st.info(T["conn_no_tables"])
             else:
                 col_suf, col_btn = st.columns([2, 1])
                 with col_suf:
                     suffixe = st.text_input(
-                        "Pré-remplir depuis un suffixe",
-                        placeholder="Ex : _idir",
+                        T["conn_suffix_label"],
+                        placeholder=T["conn_suffix_ph"],
                         key="conn_suffixe",
                     )
                 with col_btn:
                     st.write("")
                     st.write("")
-                    if st.button("↓ Pré-remplir", use_container_width=True, key="btn_prefill",
+                    if st.button(T["conn_prefill_btn"], use_container_width=True, key="btn_prefill",
                                  disabled=not (suffixe and suffixe.strip())):
                         suf = suffixe.strip()
                         df = st.session_state["df_tables"].copy()
                         mask = df["Table actuelle"].str.endswith(suf)
                         if not mask.any():
-                            st.warning(f"Aucune table ne se termine par « {suf} ».")
+                            st.warning(T["conn_suffix_warn"].format(suf))
                         else:
                             df.loc[mask, "Table cible"] = df.loc[mask, "Table actuelle"].str[:-len(suf)]
                             df.loc[mask, "Modifier"] = True
@@ -376,12 +399,12 @@ def main():
                 edited_tables = st.data_editor(
                     st.session_state["df_tables"],
                     column_config={
-                        "Modifier":       st.column_config.CheckboxColumn("Modifier", width="small"),
-                        "Type":           st.column_config.TextColumn("Type", disabled=True, width="small"),
-                        "Catalogue":      st.column_config.TextColumn("Catalogue", disabled=True),
-                        "Schéma":         st.column_config.TextColumn("Schéma", disabled=True),
-                        "Table actuelle": st.column_config.TextColumn("Table actuelle", disabled=True),
-                        "Table cible":    st.column_config.TextColumn("Table cible"),
+                        "Modifier":       st.column_config.CheckboxColumn(T["conn_col_check"], width="small"),
+                        "Type":           st.column_config.TextColumn(T["conn_col_type"], disabled=True, width="small"),
+                        "Catalogue":      st.column_config.TextColumn(T["conn_col_catalog"], disabled=True),
+                        "Schéma":         st.column_config.TextColumn(T["conn_col_schema"], disabled=True),
+                        "Table actuelle": st.column_config.TextColumn(T["conn_col_cur_table"], disabled=True),
+                        "Table cible":    st.column_config.TextColumn(T["conn_col_target_table"]),
                     },
                     hide_index=True,
                     use_container_width=True,
@@ -397,18 +420,19 @@ def main():
 
             recap = []
             if catalogue_change:
-                recap.append(f"- Catalogue : `{catalogue_source}` → `{catalogue_cible.strip()}`")
+                recap.append(T["conn_recap_catalog"].format(catalogue_source, catalogue_cible.strip()))
             if serveur_change:
-                recap.append(f"- Serveur : `{conn_ref['server']}` → `{serveur_cible.strip()}`")
+                recap.append(T["conn_recap_server"].format(conn_ref['server'], serveur_cible.strip()))
             if http_change:
-                recap.append(f"- Chemin HTTP : `{conn_ref['http_path']}` → `{http_path_cible.strip()}`")
+                recap.append(T["conn_recap_http"].format(conn_ref['http_path'], http_path_cible.strip()))
             if nb_coches_tables:
-                recap.append(f"- {nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} renommée{'s' if nb_coches_tables > 1 else ''}")
+                s = "s" if nb_coches_tables > 1 else ""
+                recap.append(T["conn_recap_tables"].format(n=nb_coches_tables, s=s))
             if recap:
-                st.caption("**Modifications qui seront appliquées :**\n" + "\n".join(recap))
+                st.caption(T["conn_recap_title"].format("\n".join(recap)))
 
             if st.button(
-                "✅ Appliquer et télécharger",
+                T["conn_apply_btn"],
                 type="primary",
                 disabled=not catalogue_change and not serveur_change and not http_change and nb_coches_tables == 0,
                 key="btn_appliquer_tout",
@@ -422,7 +446,7 @@ def main():
                             xml_modifie, catalogue_source, catalogue_cible.strip()
                         )
                     except ValueError as e:
-                        erreurs.append(f"Catalogue : {e}")
+                        erreurs.append(T["conn_err_catalog"].format(e))
 
                 if serveur_change or http_change:
                     try:
@@ -432,14 +456,14 @@ def main():
                             conn_ref["http_path"], http_path_cible.strip(),
                         )
                     except ValueError as e:
-                        erreurs.append(f"Serveur : {e}")
+                        erreurs.append(T["conn_err_server"].format(e))
 
                 if nb_coches_tables:
                     selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
                     try:
                         xml_modifie, nb_tab = remplacer_tables(xml_modifie, selection)
                     except ValueError as e:
-                        erreurs.append(f"Tables : {e}")
+                        erreurs.append(T["conn_err_tables"].format(e))
 
                 if erreurs:
                     for err in erreurs:
@@ -447,17 +471,19 @@ def main():
                 else:
                     msgs = []
                     if catalogue_change:
-                        msgs.append(f"{nb_cat} connexion{'s' if nb_cat > 1 else ''} mise{'s' if nb_cat > 1 else ''} à jour")
+                        s = "s" if nb_cat > 1 else ""
+                        msgs.append(T["conn_ok_catalog"].format(n=nb_cat, s=s))
                     if serveur_change or http_change:
-                        msgs.append("serveur mis à jour")
+                        msgs.append(T["conn_ok_server"])
                     if nb_coches_tables:
-                        msgs.append(f"{nb_tab} occurrence{'s' if nb_tab > 1 else ''} de tables modifiée{'s' if nb_tab > 1 else ''}")
+                        s = "s" if nb_tab > 1 else ""
+                        msgs.append(T["conn_ok_tables"].format(n=nb_tab, s=s))
                     st.success("✅ " + " · ".join(msgs) + ".")
                     nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                     st.download_button(
-                        label="⬇️ Télécharger le fichier modifié",
+                        label=T["conn_download"],
                         data=xml_modifie,
-                        file_name=f"{nom_base}_connexion.twb",
+                        file_name=f"{nom_base}{T['conn_suffix']}.twb",
                         mime="application/xml",
                         key="dl_connexion",
                     )
