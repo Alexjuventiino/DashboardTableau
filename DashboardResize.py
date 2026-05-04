@@ -260,7 +260,7 @@ def main():
         if not catalogues:
             st.warning("Aucune connexion avec un catalogue Databricks détectée dans ce fichier.")
         else:
-            # Afficher les connexions détectées
+            # ── Connexions détectées ────────────────────────────
             st.subheader("Connexions détectées")
             for c in catalogues:
                 st.markdown(
@@ -269,8 +269,9 @@ def main():
                     + (f"  |  **Schéma :** `{c['schema']}`" if c['schema'] else "")
                 )
 
+            # ── Catalogue ──────────────────────────────────────
             st.divider()
-            st.subheader("Remplacer le catalogue")
+            st.subheader("1 — Remplacer le catalogue")
 
             catalogues_uniques = [c["catalog"] for c in catalogues]
             catalogue_source = st.selectbox(
@@ -284,34 +285,9 @@ def main():
                 key="conn_cible",
             )
 
-            st.write("")
-            if st.button("🔄 Remplacer", type="primary", key="btn_connexion"):
-                if not catalogue_cible or not catalogue_cible.strip():
-                    st.error("Le catalogue cible ne peut pas être vide.")
-                else:
-                    try:
-                        fichier, nb = remplacer_catalogue(
-                            xml_content,
-                            catalogue_source,
-                            catalogue_cible.strip(),
-                        )
-                        st.success(
-                            f"✅ Catalogue remplacé ({nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''})."
-                        )
-                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
-                        st.download_button(
-                            label="⬇️ Télécharger le fichier modifié",
-                            data=fichier,
-                            file_name=f"{nom_base}_connexion.twb",
-                            mime="application/xml",
-                            key="dl_connexion",
-                        )
-                    except ValueError as e:
-                        st.error(str(e))
-
-            # ── Section tables dbt ──────────────────────────────
+            # ── Tables ─────────────────────────────────────────
             st.divider()
-            st.subheader("Tables — renommer")
+            st.subheader("2 — Renommer les tables")
             st.caption(
                 "Cochez les tables à renommer et éditez le nom cible. "
                 "Le champ suffixe permet de pré-remplir automatiquement toutes les lignes correspondantes."
@@ -321,7 +297,6 @@ def main():
             if not tables_sql:
                 st.info("Aucune table détectée dans le fichier.")
             else:
-                # Pré-remplissage par suffixe
                 col_suf, col_btn = st.columns([2, 1])
                 with col_suf:
                     suffixe = st.text_input(
@@ -345,7 +320,6 @@ def main():
                             st.session_state["df_tables"] = df
                             st.rerun()
 
-                # Data editor
                 edited_tables = st.data_editor(
                     st.session_state["df_tables"],
                     column_config={
@@ -361,30 +335,61 @@ def main():
                     key="editor_tables",
                 )
 
-                nb_coches_tables = int(edited_tables["Modifier"].sum())
-                st.write("")
-                if st.button(
-                    f"Renommer ({nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} sélectionnée{'s' if nb_coches_tables > 1 else ''})",
-                    type="primary",
-                    disabled=nb_coches_tables == 0,
-                    key="btn_tables",
-                ):
-                    selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
+            # ── Appliquer tout ─────────────────────────────────
+            st.divider()
+            nb_coches_tables = int(edited_tables["Modifier"].sum()) if tables_sql else 0
+            catalogue_change = bool(catalogue_cible and catalogue_cible.strip() and catalogue_cible.strip() != catalogue_source)
+
+            recap = []
+            if catalogue_change:
+                recap.append(f"- Catalogue : `{catalogue_source}` → `{catalogue_cible.strip()}`")
+            if nb_coches_tables:
+                recap.append(f"- {nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} renommée{'s' if nb_coches_tables > 1 else ''}")
+            if recap:
+                st.caption("**Modifications qui seront appliquées :**\n" + "\n".join(recap))
+
+            if st.button(
+                "✅ Appliquer et télécharger",
+                type="primary",
+                disabled=not catalogue_change and nb_coches_tables == 0,
+                key="btn_appliquer_tout",
+            ):
+                erreurs = []
+                xml_modifie = xml_content
+
+                if catalogue_change:
                     try:
-                        fichier, nb = remplacer_tables(xml_content, selection)
-                        st.success(
-                            f"✅ {nb} occurrence{'s' if nb > 1 else ''} modifiée{'s' if nb > 1 else ''}."
-                        )
-                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
-                        st.download_button(
-                            label="⬇️ Télécharger le fichier modifié",
-                            data=fichier,
-                            file_name=f"{nom_base}_tables.twb",
-                            mime="application/xml",
-                            key="dl_tables",
+                        xml_modifie, nb_cat = remplacer_catalogue(
+                            xml_modifie, catalogue_source, catalogue_cible.strip()
                         )
                     except ValueError as e:
-                        st.error(str(e))
+                        erreurs.append(f"Catalogue : {e}")
+
+                if nb_coches_tables:
+                    selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
+                    try:
+                        xml_modifie, nb_tab = remplacer_tables(xml_modifie, selection)
+                    except ValueError as e:
+                        erreurs.append(f"Tables : {e}")
+
+                if erreurs:
+                    for err in erreurs:
+                        st.error(err)
+                else:
+                    msgs = []
+                    if catalogue_change:
+                        msgs.append(f"{nb_cat} connexion{'s' if nb_cat > 1 else ''} mise{'s' if nb_cat > 1 else ''} à jour")
+                    if nb_coches_tables:
+                        msgs.append(f"{nb_tab} occurrence{'s' if nb_tab > 1 else ''} de tables modifiée{'s' if nb_tab > 1 else ''}")
+                    st.success("✅ " + " · ".join(msgs) + ".")
+                    nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                    st.download_button(
+                        label="⬇️ Télécharger le fichier modifié",
+                        data=xml_modifie,
+                        file_name=f"{nom_base}_connexion.twb",
+                        mime="application/xml",
+                        key="dl_connexion",
+                    )
 
 
 if __name__ == "__main__":
