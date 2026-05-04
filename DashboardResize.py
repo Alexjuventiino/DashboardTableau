@@ -8,6 +8,7 @@ from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, app
 from outil3_connexion import (
     recuperer_catalogues, remplacer_catalogue,
     recuperer_tables_sql, init_df_tables, remplacer_tables,
+    remplacer_serveur,
 )
 
 
@@ -285,9 +286,29 @@ def main():
                 key="conn_cible",
             )
 
+            # ── Serveur / chemin HTTP ───────────────────────────
+            st.divider()
+            st.subheader("2 — Serveur / chemin HTTP")
+            st.caption("Modifiez uniquement les champs que vous souhaitez changer.")
+
+            conn_ref = catalogues[0]
+            col_srv, col_http = st.columns(2)
+            with col_srv:
+                serveur_cible = st.text_input(
+                    "Nom d'hôte du serveur",
+                    value=conn_ref["server"],
+                    key="conn_server_cible",
+                )
+            with col_http:
+                http_path_cible = st.text_input(
+                    "Chemin HTTP (v-http-path)",
+                    value=conn_ref["http_path"],
+                    key="conn_http_cible",
+                )
+
             # ── Tables ─────────────────────────────────────────
             st.divider()
-            st.subheader("2 — Renommer les tables")
+            st.subheader("3 — Renommer les tables")
             st.caption(
                 "Cochez les tables à renommer et éditez le nom cible. "
                 "Le champ suffixe permet de pré-remplir automatiquement toutes les lignes correspondantes."
@@ -339,10 +360,16 @@ def main():
             st.divider()
             nb_coches_tables = int(edited_tables["Modifier"].sum()) if tables_sql else 0
             catalogue_change = bool(catalogue_cible and catalogue_cible.strip() and catalogue_cible.strip() != catalogue_source)
+            serveur_change   = serveur_cible.strip() != conn_ref["server"]
+            http_change      = http_path_cible.strip() != conn_ref["http_path"]
 
             recap = []
             if catalogue_change:
                 recap.append(f"- Catalogue : `{catalogue_source}` → `{catalogue_cible.strip()}`")
+            if serveur_change:
+                recap.append(f"- Serveur : `{conn_ref['server']}` → `{serveur_cible.strip()}`")
+            if http_change:
+                recap.append(f"- Chemin HTTP : `{conn_ref['http_path']}` → `{http_path_cible.strip()}`")
             if nb_coches_tables:
                 recap.append(f"- {nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} renommée{'s' if nb_coches_tables > 1 else ''}")
             if recap:
@@ -351,7 +378,7 @@ def main():
             if st.button(
                 "✅ Appliquer et télécharger",
                 type="primary",
-                disabled=not catalogue_change and nb_coches_tables == 0,
+                disabled=not catalogue_change and not serveur_change and not http_change and nb_coches_tables == 0,
                 key="btn_appliquer_tout",
             ):
                 erreurs = []
@@ -364,6 +391,16 @@ def main():
                         )
                     except ValueError as e:
                         erreurs.append(f"Catalogue : {e}")
+
+                if serveur_change or http_change:
+                    try:
+                        xml_modifie, nb_srv = remplacer_serveur(
+                            xml_modifie,
+                            conn_ref["server"], serveur_cible.strip(),
+                            conn_ref["http_path"], http_path_cible.strip(),
+                        )
+                    except ValueError as e:
+                        erreurs.append(f"Serveur : {e}")
 
                 if nb_coches_tables:
                     selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
@@ -379,6 +416,8 @@ def main():
                     msgs = []
                     if catalogue_change:
                         msgs.append(f"{nb_cat} connexion{'s' if nb_cat > 1 else ''} mise{'s' if nb_cat > 1 else ''} à jour")
+                    if serveur_change or http_change:
+                        msgs.append("serveur mis à jour")
                     if nb_coches_tables:
                         msgs.append(f"{nb_tab} occurrence{'s' if nb_tab > 1 else ''} de tables modifiée{'s' if nb_tab > 1 else ''}")
                     st.success("✅ " + " · ".join(msgs) + ".")

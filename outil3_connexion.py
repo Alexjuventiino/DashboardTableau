@@ -34,9 +34,10 @@ def recuperer_catalogues(xml_content: bytes) -> list:
             continue
         vus.add(cle)
         connexions.append({
-            "catalog": catalog,
-            "schema":  conn.get("schema", ""),
-            "server":  conn.get("server", ""),
+            "catalog":   catalog,
+            "schema":    conn.get("schema", ""),
+            "server":    conn.get("server", ""),
+            "http_path": conn.get("v-http-path", "").strip(),
         })
 
     return connexions
@@ -92,6 +93,38 @@ def remplacer_catalogue(xml_content, catalogue_source: str,
     from io import BytesIO as _BytesIO
     return _BytesIO(texte.encode("utf-8")), nb
 
+
+
+def remplacer_serveur(xml_content, serveur_source: str, serveur_cible: str,
+                      http_path_source: str, http_path_cible: str) -> tuple:
+    """
+    Remplace le nom d'hôte du serveur et/ou le chemin HTTP dans tout le fichier TWB.
+    Seules les valeurs qui diffèrent de la source sont appliquées.
+    Retourne (BytesIO, nb_remplacements).
+    """
+    if hasattr(xml_content, "read"):
+        xml_content.seek(0)
+        texte = xml_content.read().decode("utf-8")
+    else:
+        texte = xml_content.decode("utf-8")
+
+    nb = 0
+    sc = serveur_cible.strip()
+    hc = http_path_cible.strip()
+
+    if sc and sc != serveur_source:
+        nb += texte.count(serveur_source)
+        texte = texte.replace(serveur_source, sc)
+
+    if hc and hc != http_path_source:
+        nb += texte.count(http_path_source)
+        texte = texte.replace(http_path_source, hc)
+
+    if nb == 0:
+        raise ValueError("Serveur et chemin HTTP inchangés.")
+
+    from io import BytesIO as _BytesIO
+    return _BytesIO(texte.encode("utf-8")), nb
 
 
 # ─────────────────────────────────────────────────────────────
