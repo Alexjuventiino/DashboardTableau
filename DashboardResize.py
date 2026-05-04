@@ -1,267 +1,15 @@
 import streamlit as st
 import streamlit_antd_components as sac
-import xml.etree.ElementTree as ET
-from io import BytesIO
 import pandas as pd
-import zipfile
-import re
 
-
-# ═══════════════════════════════════════════════════════════════
-# UTILITAIRES COMMUNS
-# ═══════════════════════════════════════════════════════════════
-
-def extraire_twb_depuis_twbx(file_bytes: bytes) -> bytes:
-    with zipfile.ZipFile(BytesIO(file_bytes)) as z:
-        twb_names = [n for n in z.namelist() if n.endswith(".twb")]
-        if not twb_names:
-            raise ValueError("Aucun fichier .twb trouvé dans l'archive .twbx.")
-        with z.open(twb_names[0]) as f:
-            return f.read()
-
-
-def charger_contenu_xml(uploaded_file) -> bytes:
-    raw = uploaded_file.read()
-    if uploaded_file.name.endswith(".twbx"):
-        return extraire_twb_depuis_twbx(raw)
-    return raw
-
-
-def parser_xml(xml_content: bytes) -> ET.ElementTree:
-    try:
-        return ET.parse(BytesIO(xml_content))
-    except ET.ParseError as e:
-        raise ValueError(f"Le fichier XML est malformé : {e}")
-
-
-def serialiser_xml(tree: ET.ElementTree) -> BytesIO:
-    output = BytesIO()
-    tree.write(output, encoding="utf-8", xml_declaration=False)
-    output.seek(0)
-    return output
-
-
-# ═══════════════════════════════════════════════════════════════
-# OUTIL 1 — REDIMENSIONNER
-# ═══════════════════════════════════════════════════════════════
-
-def recuperer_dashboards_avec_tailles(xml_content: bytes):
-    tree = parser_xml(xml_content)
-    root = tree.getroot()
-    dashboards = []
-    for dashboard in root.findall(".//dashboard"):
-        name = dashboard.get("name")
-        size = dashboard.find("./size")
-        if size is not None:
-            w = size.get("maxwidth", "?")
-            h = size.get("maxheight", "?")
-        else:
-            w, h = "?", "?"
-        dashboards.append({"name": name, "width": w, "height": h})
-    return dashboards
-
-
-def calculer_nouvelles_valeurs(x, w, y, h, maxwidth, maxheight,
-                               nouvelle_largeur, nouvelle_hauteur,
-                               deplacer_droite, deplacer_bas):
-    if maxwidth == 0 or maxheight == 0 or nouvelle_largeur == 0 or nouvelle_hauteur == 0:
-        raise ValueError("Les dimensions ne peuvent pas être nulles.")
-
-    if deplacer_droite and not deplacer_bas:
-        nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
-        nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
-        nouveau_y, nouveau_h = y, h
-    elif deplacer_bas and not deplacer_droite:
-        nouveau_x, nouveau_w = x, w
-        nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
-        nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
-    elif deplacer_bas and deplacer_droite:
-        nouveau_x = (x / (100000 / maxwidth) + (nouvelle_largeur - maxwidth)) * (100000 / nouvelle_largeur)
-        nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
-        nouveau_y = (y / (100000 / maxheight) + (nouvelle_hauteur - maxheight)) * (100000 / nouvelle_hauteur)
-        nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
-    else:
-        nouveau_x = x / (100000 / maxwidth) * (100000 / nouvelle_largeur)
-        nouveau_w = w / (100000 / maxwidth) * (100000 / nouvelle_largeur)
-        nouveau_y = y / (100000 / maxheight) * (100000 / nouvelle_hauteur)
-        nouveau_h = h / (100000 / maxheight) * (100000 / nouvelle_hauteur)
-
-    return int(nouveau_x), int(nouveau_w), int(nouveau_y), int(nouveau_h)
-
-
-def modifier_tableaux_de_bord(xml_content: bytes, modifications: dict,
-                               deplacer_droite: bool, deplacer_bas: bool) -> BytesIO:
-    tree = parser_xml(xml_content)
-    root = tree.getroot()
-
-    for dashboard in root.findall(".//dashboard"):
-        name = dashboard.get("name")
-        if name not in modifications:
-            continue
-        nouvelle_largeur, nouvelle_hauteur = modifications[name]
-        maxwidth, maxheight = float(nouvelle_largeur), float(nouvelle_hauteur)
-
-        for size in dashboard.findall("./size"):
-            maxwidth  = float(size.get("maxwidth")  or 1.0)
-            maxheight = float(size.get("maxheight") or 1.0)
-            size.set("maxwidth",  str(nouvelle_largeur))
-            size.set("minwidth",  str(nouvelle_largeur))
-            size.set("maxheight", str(nouvelle_hauteur))
-            size.set("minheight", str(nouvelle_hauteur))
-
-        for zone in dashboard.findall(".//zone"):
-            x = int(zone.get("x", 0))
-            w = int(zone.get("w", 0))
-            y = int(zone.get("y", 0))
-            h = int(zone.get("h", 0))
-            nx, nw, ny, nh = calculer_nouvelles_valeurs(
-                x, w, y, h, maxwidth, maxheight,
-                nouvelle_largeur, nouvelle_hauteur,
-                deplacer_droite, deplacer_bas
-            )
-            zone.set("x", str(nx))
-            zone.set("w", str(nw))
-            zone.set("y", str(ny))
-            zone.set("h", str(nh))
-
-    return serialiser_xml(tree)
-
-
-def init_df_resize(dashboards):
-    return pd.DataFrame([
-        {
-            "Modifier":         False,
-            "Dashboard":        d["name"],
-            "Largeur actuelle": d["width"],
-            "Hauteur actuelle": d["height"],
-            "Nouvelle largeur": None,
-            "Nouvelle hauteur": None,
-        }
-        for d in dashboards
-    ])
-
-
-# ═══════════════════════════════════════════════════════════════
-# OUTIL 2 — FORMATER LES FILTRES
-# ═══════════════════════════════════════════════════════════════
-
-MODES = {
-    "":              "Liste complète (défaut)",
-    "dropdown":      "Liste déroulante — sélection unique",
-    "checkdropdown": "Liste déroulante — multi-sélection",
-    "typeinlist":    "Saisie texte",
-    "multivalue":    "Liste à cocher",
-    "singlevalue":   "Bouton radio",
-}
-MODES_LABELS  = list(MODES.values())
-MODES_REVERSE = {v: k for k, v in MODES.items()}
-
-
-def extraire_nom_champ(param: str) -> str:
-    """Extrait le nom lisible depuis un param Tableau."""
-    match = re.search(
-        r'\[(?:none|sum|avg|count|min|max|attr|year|month|day|mdy|wk)?:?([^\]:]+):[^\]]*\]$',
-        param
-    )
-    if match:
-        return match.group(1)
-    parts = re.findall(r'\[([^\]]+)\]', param)
-    return parts[-1] if parts else param
-
-
-def recuperer_filtres(xml_content: bytes) -> list:
-    tree = parser_xml(xml_content)
-    root = tree.getroot()
-    filtres = []
-    vus = set()  # (dashboard_name, zone_id) déjà traités
-
-    for dashboard in root.findall(".//dashboard"):
-        # Exclure les layouts alternatifs (phone, tablet...) générés par Tableau
-        # Ces éléments ont un attribut "type" non vide ("phone", "tablet", etc.)
-        if dashboard.get("type"):
-            continue
-
-        dashboard_name = dashboard.get("name")
-        for zone in dashboard.findall(".//zone[@type-v2='filter']"):
-            zone_id = zone.get("id")
-            cle = (dashboard_name, zone_id)
-
-            # Ignorer les zones déjà vues (duplications structurelles dans le XML)
-            if cle in vus:
-                continue
-            vus.add(cle)
-
-            param      = zone.get("param", "")
-            mode_xml   = zone.get("mode", "")
-            show_apply = zone.get("show-apply", "") == "true"
-            champ      = extraire_nom_champ(param) if param else "(inconnu)"
-            mode_label = MODES.get(mode_xml, mode_xml)
-
-            filtres.append({
-                "zone_id":     zone_id,
-                "dashboard":   dashboard_name,
-                "champ":       champ,
-                "param":       param,
-                "mode_actuel": mode_label,
-                "mode_xml":    mode_xml,
-                "show_apply":  show_apply,
-            })
-
-    return filtres
-
-
-def init_df_filtres(filtres: list) -> pd.DataFrame:
-    return pd.DataFrame([
-        {
-            "Modifier":         False,
-            "Dashboard":        f["dashboard"],
-            "Champ":            f["champ"],
-            "Mode actuel":      f["mode_actuel"],
-            "Nouveau mode":     f["mode_actuel"],  # pré-rempli avec valeur actuelle
-            "Bouton Appliquer": f["show_apply"],
-        }
-        for f in filtres
-    ])
-
-
-def appliquer_modifications_filtres(xml_content: bytes, df_edited: pd.DataFrame,
-                                    filtres_source: list) -> BytesIO:
-    tree = parser_xml(xml_content)
-    root = tree.getroot()
-
-    # Index des modifications : (dashboard, param) → (mode_xml, show_apply)
-    modifs = {}
-    for i, row in df_edited[df_edited["Modifier"]].iterrows():
-        source   = filtres_source[i]
-        mode_xml = MODES_REVERSE.get(row["Nouveau mode"], "")
-        modifs[(source["dashboard"], source["param"])] = (mode_xml, bool(row["Bouton Appliquer"]))
-
-    if not modifs:
-        return serialiser_xml(tree)
-
-    for dashboard in root.findall(".//dashboard"):
-        dashboard_name = dashboard.get("name")
-        for zone in dashboard.findall(".//zone[@type-v2='filter']"):
-            param = zone.get("param", "")
-            key   = (dashboard_name, param)
-            if key not in modifs:
-                continue
-
-            mode_xml, show_apply = modifs[key]
-
-            # Mode : supprimer l'attribut si retour au défaut "liste complète"
-            if mode_xml == "":
-                zone.attrib.pop("mode", None)
-            else:
-                zone.set("mode", mode_xml)
-
-            # Bouton Appliquer
-            if show_apply:
-                zone.set("show-apply", "true")
-            else:
-                zone.attrib.pop("show-apply", None)
-
-    return serialiser_xml(tree)
+from utils import charger_contenu_xml, parser_xml
+from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
+from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres
+from outil3_connexion import (
+    recuperer_catalogues, remplacer_catalogue,
+    recuperer_tables_sql, init_df_tables, remplacer_tables,
+    remplacer_serveur,
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -286,12 +34,12 @@ def main():
 
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
-        for key in ["df_resize", "df_filtres", "filtres_source"]:
+        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues", "tables_sql", "df_tables"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
     st.divider()
-    tab_resize, tab_filtres = st.tabs(["📐 Redimensionner", "🔽 Formater les filtres"])
+    tab_resize, tab_filtres, tab_connexion = st.tabs(["📐 Redimensionner", "🔽 Formater les filtres", "🔌 Changer la connexion"])
 
 
     # ════════════════════════════════════════════════════
@@ -496,6 +244,223 @@ def main():
                     )
                 except ValueError as e:
                     st.error(str(e))
+
+
+    # ════════════════════════════════════════════════════
+    # ONGLET 3 — CHANGER LA CONNEXION
+    # ════════════════════════════════════════════════════
+    with tab_connexion:
+
+        if "catalogues" not in st.session_state:
+            st.session_state["catalogues"] = recuperer_catalogues(xml_content)
+            st.session_state["tables_sql"] = recuperer_tables_sql(xml_content)
+            st.session_state["df_tables"]  = init_df_tables(st.session_state["tables_sql"])
+
+        catalogues = st.session_state["catalogues"]
+
+        if not catalogues:
+            st.warning("Aucune connexion avec un catalogue Databricks détectée dans ce fichier.")
+        else:
+            # ── Connexions détectées ────────────────────────────
+            st.subheader("Connexions détectées")
+            for c in catalogues:
+                st.markdown(
+                    f"- **Catalogue :** `{c['catalog']}`"
+                    + (f"  |  **Serveur :** `{c['server']}`" if c['server'] else "")
+                    + (f"  |  **Schéma :** `{c['schema']}`" if c['schema'] else "")
+                )
+
+            # ── Catalogue ──────────────────────────────────────
+            st.divider()
+            st.subheader("1 — Remplacer le catalogue")
+
+            catalogues_uniques = [c["catalog"] for c in catalogues]
+            catalogue_source = st.selectbox(
+                "Catalogue à remplacer",
+                options=catalogues_uniques,
+                key="conn_source",
+            )
+            catalogue_cible = st.text_input(
+                "Nouveau catalogue cible",
+                placeholder="Ex : datalake_insight_analytics",
+                key="conn_cible",
+            )
+
+            # ── Serveur / chemin HTTP ───────────────────────────
+            st.divider()
+            st.subheader("2 — Serveur / chemin HTTP")
+
+            _ENVS = {
+                "Exploration (préprod/dev)": {
+                    "server":    "decathlon-dataplatform-exploration.cloud.databricks.com",
+                    "http_path": "/sql/1.0/warehouses/e71fadc53501a3f1",
+                },
+                "Indus (prod)": {
+                    "server":    "decathlon-dataplatform-indus.cloud.databricks.com",
+                    "http_path": "/sql/1.0/warehouses/a978e5a19876d1b6",
+                },
+                "Personnalisé": None,
+            }
+
+            conn_ref = catalogues[0]
+
+            preset = st.radio(
+                "Environnement cible",
+                options=list(_ENVS.keys()),
+                horizontal=True,
+                key="conn_env_preset",
+            )
+
+            # Quand le preset change, on écrase les valeurs dans session_state
+            # avant que les text_input soient rendus.
+            if _ENVS[preset] is not None:
+                _default_srv  = _ENVS[preset]["server"]
+                _default_http = _ENVS[preset]["http_path"]
+            else:
+                _default_srv  = conn_ref["server"]
+                _default_http = conn_ref["http_path"]
+
+            prev_preset_key = "conn_env_preset_prev"
+            if st.session_state.get(prev_preset_key) != preset:
+                st.session_state["conn_server_cible"] = _default_srv
+                st.session_state["conn_http_cible"]   = _default_http
+                st.session_state[prev_preset_key]     = preset
+
+            col_srv, col_http = st.columns(2)
+            with col_srv:
+                serveur_cible = st.text_input(
+                    "Nom d'hôte du serveur",
+                    key="conn_server_cible",
+                )
+            with col_http:
+                http_path_cible = st.text_input(
+                    "Chemin HTTP (v-http-path)",
+                    key="conn_http_cible",
+                )
+
+            # ── Tables ─────────────────────────────────────────
+            st.divider()
+            st.subheader("3 — Renommer les tables")
+            st.caption(
+                "Cochez les tables à renommer et éditez le nom cible. "
+                "Le champ suffixe permet de pré-remplir automatiquement toutes les lignes correspondantes."
+            )
+
+            tables_sql = st.session_state.get("tables_sql", [])
+            if not tables_sql:
+                st.info("Aucune table détectée dans le fichier.")
+            else:
+                col_suf, col_btn = st.columns([2, 1])
+                with col_suf:
+                    suffixe = st.text_input(
+                        "Pré-remplir depuis un suffixe",
+                        placeholder="Ex : _idir",
+                        key="conn_suffixe",
+                    )
+                with col_btn:
+                    st.write("")
+                    st.write("")
+                    if st.button("↓ Pré-remplir", use_container_width=True, key="btn_prefill",
+                                 disabled=not (suffixe and suffixe.strip())):
+                        suf = suffixe.strip()
+                        df = st.session_state["df_tables"].copy()
+                        mask = df["Table actuelle"].str.endswith(suf)
+                        if not mask.any():
+                            st.warning(f"Aucune table ne se termine par « {suf} ».")
+                        else:
+                            df.loc[mask, "Table cible"] = df.loc[mask, "Table actuelle"].str[:-len(suf)]
+                            df.loc[mask, "Modifier"] = True
+                            st.session_state["df_tables"] = df
+                            st.rerun()
+
+                edited_tables = st.data_editor(
+                    st.session_state["df_tables"],
+                    column_config={
+                        "Modifier":       st.column_config.CheckboxColumn("Modifier", width="small"),
+                        "Type":           st.column_config.TextColumn("Type", disabled=True, width="small"),
+                        "Catalogue":      st.column_config.TextColumn("Catalogue", disabled=True),
+                        "Schéma":         st.column_config.TextColumn("Schéma", disabled=True),
+                        "Table actuelle": st.column_config.TextColumn("Table actuelle", disabled=True),
+                        "Table cible":    st.column_config.TextColumn("Table cible"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_tables",
+                )
+
+            # ── Appliquer tout ─────────────────────────────────
+            st.divider()
+            nb_coches_tables = int(edited_tables["Modifier"].sum()) if tables_sql else 0
+            catalogue_change = bool(catalogue_cible and catalogue_cible.strip() and catalogue_cible.strip() != catalogue_source)
+            serveur_change   = serveur_cible.strip() != conn_ref["server"]
+            http_change      = http_path_cible.strip() != conn_ref["http_path"]
+
+            recap = []
+            if catalogue_change:
+                recap.append(f"- Catalogue : `{catalogue_source}` → `{catalogue_cible.strip()}`")
+            if serveur_change:
+                recap.append(f"- Serveur : `{conn_ref['server']}` → `{serveur_cible.strip()}`")
+            if http_change:
+                recap.append(f"- Chemin HTTP : `{conn_ref['http_path']}` → `{http_path_cible.strip()}`")
+            if nb_coches_tables:
+                recap.append(f"- {nb_coches_tables} table{'s' if nb_coches_tables > 1 else ''} renommée{'s' if nb_coches_tables > 1 else ''}")
+            if recap:
+                st.caption("**Modifications qui seront appliquées :**\n" + "\n".join(recap))
+
+            if st.button(
+                "✅ Appliquer et télécharger",
+                type="primary",
+                disabled=not catalogue_change and not serveur_change and not http_change and nb_coches_tables == 0,
+                key="btn_appliquer_tout",
+            ):
+                erreurs = []
+                xml_modifie = xml_content
+
+                if catalogue_change:
+                    try:
+                        xml_modifie, nb_cat = remplacer_catalogue(
+                            xml_modifie, catalogue_source, catalogue_cible.strip()
+                        )
+                    except ValueError as e:
+                        erreurs.append(f"Catalogue : {e}")
+
+                if serveur_change or http_change:
+                    try:
+                        xml_modifie, nb_srv = remplacer_serveur(
+                            xml_modifie,
+                            conn_ref["server"], serveur_cible.strip(),
+                            conn_ref["http_path"], http_path_cible.strip(),
+                        )
+                    except ValueError as e:
+                        erreurs.append(f"Serveur : {e}")
+
+                if nb_coches_tables:
+                    selection = edited_tables[edited_tables["Modifier"]].to_dict("records")
+                    try:
+                        xml_modifie, nb_tab = remplacer_tables(xml_modifie, selection)
+                    except ValueError as e:
+                        erreurs.append(f"Tables : {e}")
+
+                if erreurs:
+                    for err in erreurs:
+                        st.error(err)
+                else:
+                    msgs = []
+                    if catalogue_change:
+                        msgs.append(f"{nb_cat} connexion{'s' if nb_cat > 1 else ''} mise{'s' if nb_cat > 1 else ''} à jour")
+                    if serveur_change or http_change:
+                        msgs.append("serveur mis à jour")
+                    if nb_coches_tables:
+                        msgs.append(f"{nb_tab} occurrence{'s' if nb_tab > 1 else ''} de tables modifiée{'s' if nb_tab > 1 else ''}")
+                    st.success("✅ " + " · ".join(msgs) + ".")
+                    nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                    st.download_button(
+                        label="⬇️ Télécharger le fichier modifié",
+                        data=xml_modifie,
+                        file_name=f"{nom_base}_connexion.twb",
+                        mime="application/xml",
+                        key="dl_connexion",
+                    )
 
 
 if __name__ == "__main__":
