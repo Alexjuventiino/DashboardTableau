@@ -190,7 +190,44 @@ def init_df_tables(tables: list):
     ])
 
 
-def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
+def _remplacer_table_dans_texte(texte: str, table_act: str, table_cib: str) -> tuple:
+    """
+    Remplace table_act par table_cib dans un XML sérialisé en chaîne.
+    Couvre tous les contextes connus dans les fichiers Tableau TWB :
+      [table]  (table)  .table)  table (  ="table"  ='table'  (TitleCased)
+    Retourne (nouveau_texte, nb_remplacements).
+    """
+    esc = re.escape(table_act)
+    total = 0
+
+    # Patterns ordonnés du plus spécifique au moins spécifique
+    subs = [
+        # [table_name] — champs, parent-name, object-id…
+        (r'\[' + esc + r'\]',             f'[{table_cib}]'),
+        # (table_name) — champs qualifiés [champ (table)]
+        (r'\(' + esc + r'\)',             f'({table_cib})'),
+        # .table_name) — chemin catalog.schema.table dans object-id
+        (r'\.' + esc + r'\)',             f'.{table_cib})'),
+        # table_name ( — début des object-id "table (cat.schema.table)_HASH"
+        (re.escape(table_act) + r' \(',   f'{table_cib} ('),
+        # ="table_name" et ='table_name' — attributs name= caption=
+        (r'="' + esc + r'"',              f'="{table_cib}"'),
+        (r"='" + esc + r"'",              f"='{table_cib}'"),
+    ]
+    for pattern, repl in subs:
+        texte, n = re.subn(pattern, repl, texte)
+        total += n
+
+    # Caption title-cased : "Champ (Table Name Vkho)" → "Champ (Table Name)"
+    title_act = table_act.replace("_", " ").title()
+    title_cib = table_cib.replace("_", " ").title()
+    if title_act != title_cib and title_act in texte:
+        texte = texte.replace(title_act, title_cib)
+
+    return texte, total
+
+
+def remplacer_tables(xml_content, modifications: list) -> tuple:
     """
     Renomme les tables selon la liste de modifications.
     Chaque élément doit avoir les clés : Type, Catalogue, Schéma,
@@ -206,160 +243,50 @@ def remplacer_tables(xml_content: bytes, modifications: list) -> tuple:
     if not modifs:
         raise ValueError("Aucune table modifiée (noms source et cible identiques ou cible vide).")
 
-    tree = parser_xml(xml_content)
-    root = tree.getroot()
     nb = 0
 
-    # Deux maps selon le type de relation
-    sql_map  = {}   # (schema, table_actuelle) → table_cible
-    attr_map = {}   # (schema, table_actuelle) → table_cible
-    # Le catalogue n'est PAS inclus dans la clé : remplacer_catalogue peut
-    # l'avoir déjà modifié dans l'attribut table='[cat].[schema].[table]'
-    # avant que remplacer_tables ne soit appelé.
-
-    for m in modifs:
-        if m["Type"] == "SQL":
-            sql_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
-        else:
-            attr_map[(m["Schéma"], m["Table actuelle"])] = m["Table cible"]
-
-    # Itère TOUS les éléments pour couvrir aussi les tags Tableau de type
-    # <_.fcp.ObjectModelXxx.true...relation> qui ont type='table' ou type='text'
-    # mais dont le nom de tag diffère de 'relation'.
-    for elem in root.iter():
-        rel_type = elem.get("type")
-
-        if rel_type == "text" and elem.text and sql_map:
-            sql = elem.text
-            for (schema, table_act), table_cib in sql_map.items():
-                pattern = re.compile(
-                    r'((?:FROM|JOIN)\s+' + re.escape(schema) + r'\.)'
-                    + re.escape(table_act)
-                    + r'(?=\s|$|;|\))',
-                    re.IGNORECASE,
-                )
-                nouveau_sql, n = pattern.subn(r'\g<1>' + table_cib, sql)
-                if n:
-                    sql = nouveau_sql
+    # ── Requêtes SQL (type='text') : traitement XML-aware ──────────────────
+    sql_modifs = [m for m in modifs if m["Type"] == "SQL"]
+    if sql_modifs:
+        tree = parser_xml(xml_content)
+        root = tree.getroot()
+        sql_map = {(m["Schéma"], m["Table actuelle"]): m["Table cible"] for m in sql_modifs}
+        for elem in root.iter():
+            if elem.get("type") == "text" and elem.text:
+                sql = elem.text
+                for (schema, table_act), table_cib in sql_map.items():
+                    pattern = re.compile(
+                        r'((?:FROM|JOIN)\s+' + re.escape(schema) + r'\.)'
+                        + re.escape(table_act)
+                        + r'(?=\s|$|;|\))',
+                        re.IGNORECASE,
+                    )
+                    sql, n = pattern.subn(r'\g<1>' + table_cib, sql)
                     nb += n
-            elem.text = sql
+                elem.text = sql
+        buf = serialiser_xml(tree)
+        xml_bytes = buf.getvalue()
+    else:
+        if hasattr(xml_content, "read"):
+            xml_content.seek(0)
+            xml_bytes = xml_content.read()
+        else:
+            xml_bytes = xml_content
 
-        elif rel_type == "table" and attr_map:
-            attr = elem.get("table", "")
-            m_re = _RE_ATTR_TABLE.match(attr)
-            if m_re:
-                catalog = m_re.group(1) or ""
-                schema  = m_re.group(2)
-                table   = m_re.group(3)
-                key = (schema, table)
-                if key in attr_map:
-                    table_cib = attr_map[key]
-                    if catalog:
-                        elem.set("table", f"[{catalog}].[{schema}].[{table_cib}]")
-                    else:
-                        elem.set("table", f"[{schema}].[{table_cib}]")
-                    nb += 1
-
-            name = elem.get("name", "")
-            for modif in modifs:
-                if modif["Type"] == "Table directe" and name == modif["Table actuelle"]:
-                    elem.set("name", modif["Table cible"])
-                    nb += 1
-                    break
-
-    # Met à jour les <map key='[champ (table)]' value='[table].[champ]'>
-    # dans la section <cols> (multi-tables).
+    # ── Tables directes : remplacement textuel exhaustif ───────────────────
+    # Cette approche couvre tous les éléments XML Tableau sans les énumérer :
+    # <relation>, <_.fcp...relation>, <map>, <local-name>, <column>,
+    # <object>, <object-id>, <parent-name>, <expression>, <first/second-end-point>,
+    # <column-instance>, <filter>, <field>, <datasource caption>, etc.
+    texte = xml_bytes.decode("utf-8")
     for modif in [m for m in modifs if m["Type"] == "Table directe"]:
-        table_act = modif["Table actuelle"]
-        table_cib = modif["Table cible"]
-        for mp in root.iter("map"):
-            key = mp.get("key", "")
-            val = mp.get("value", "")
-            # key : '[champ (table_act)]' → '[champ (table_cib)]'
-            if f"({table_act})" in key:
-                mp.set("key", key.replace(f"({table_act})", f"({table_cib})"))
-            # value : '[table_act].[champ]' → '[table_cib].[champ]'
-            if val.startswith(f"[{table_act}]."):
-                mp.set("value", f"[{table_cib}]." + val[len(f"[{table_act}]."):])
-
-    # Pour les tables directes : met à jour <parent-name> et <object-id>
-    # dans les metadata-records.
-    for modif in [m for m in modifs if m["Type"] == "Table directe"]:
-        table_act = modif["Table actuelle"]
-        table_cib = modif["Table cible"]
-
-        # <parent-name>[table_actuelle]</parent-name>
-        for pn in root.iter("parent-name"):
-            if pn.text == f"[{table_act}]":
-                pn.text = f"[{table_cib}]"
-
-        # <object-id>[table_actuelle (catalog.schema.table_actuelle)_HASH]</object-id>
-        for oid in root.iter("object-id"):
-            if not oid.text:
-                continue
-            new_text = oid.text
-            # Remplace le nom au début : [old_table (
-            new_text = new_text.replace(f"[{table_act} (", f"[{table_cib} (")
-            # Remplace le nom dans le chemin : .old_table)
-            new_text = re.sub(
-                r'\.' + re.escape(table_act) + r'\)',
-                '.' + table_cib + ')',
-                new_text,
-            )
-            oid.text = new_text
-
-        # <datasource caption='table_actuelle (...)'>
-        for ds in root.iter("datasource"):
-            caption = ds.get("caption", "")
-            if table_act in caption:
-                ds.set("caption", caption.replace(table_act, table_cib))
-
-        # <column datatype="table" caption="table_actuelle"
-        #         name="[__tableau_internal_object_id__].[table_actuelle (...)]">
-        for col in root.iter("column"):
-            if col.get("datatype") != "table":
-                continue
-            cap = col.get("caption", "")
-            if cap == table_act:
-                col.set("caption", table_cib)
-            nm = col.get("name", "")
-            if table_act in nm:
-                col.set("name", nm.replace(table_act, table_cib))
-
-        # <object caption="table_actuelle"
-        #         id="table_actuelle (catalog.schema.table_actuelle)_HASH">
-        # dans <object-graph>
-        for obj in root.iter("object"):
-            cap = obj.get("caption", "")
-            if cap == table_act:
-                obj.set("caption", table_cib)
-            oid_attr = obj.get("id", "")
-            if table_act in oid_attr:
-                obj.set("id", oid_attr.replace(table_act, table_cib))
-
-        # <local-name>[champ (table_actuelle)]</local-name>
-        # dans les metadata-records multi-tables
-        for ln in root.iter("local-name"):
-            if ln.text and f"({table_act})" in ln.text:
-                ln.text = ln.text.replace(f"({table_act})", f"({table_cib})")
-
-        # <column name="[champ (table_actuelle)]"
-        #         caption="Champ (Table Actuelle Title)">
-        # colonnes de datasource (pas datatype="table")
-        title_act = table_act.replace("_", " ").title()
-        title_cib = table_cib.replace("_", " ").title()
-        for col in root.iter("column"):
-            if col.get("datatype") == "table":
-                continue
-            nm = col.get("name", "")
-            if f"({table_act})" in nm:
-                col.set("name", nm.replace(f"({table_act})", f"({table_cib})"))
-            cap = col.get("caption", "")
-            if f"({title_act})" in cap:
-                col.set("caption", cap.replace(f"({title_act})", f"({title_cib})"))
+        texte, n = _remplacer_table_dans_texte(texte, modif["Table actuelle"], modif["Table cible"])
+        nb += n
 
     if nb == 0:
         raise ValueError("Aucune occurrence trouvée dans le fichier.")
 
-    return serialiser_xml(tree), nb
+    from io import BytesIO as _BytesIO
+    return _BytesIO(texte.encode("utf-8")), nb
+
 
