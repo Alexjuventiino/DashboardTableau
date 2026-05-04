@@ -311,6 +311,8 @@ def main():
                 key="conn_env_preset",
             )
 
+            # Quand le preset change, on écrase les valeurs dans session_state
+            # avant que les text_input soient rendus.
             if _ENVS[preset] is not None:
                 _default_srv  = _ENVS[preset]["server"]
                 _default_http = _ENVS[preset]["http_path"]
@@ -318,17 +320,21 @@ def main():
                 _default_srv  = conn_ref["server"]
                 _default_http = conn_ref["http_path"]
 
+            prev_preset_key = "conn_env_preset_prev"
+            if st.session_state.get(prev_preset_key) != preset:
+                st.session_state["conn_server_cible"] = _default_srv
+                st.session_state["conn_http_cible"]   = _default_http
+                st.session_state[prev_preset_key]     = preset
+
             col_srv, col_http = st.columns(2)
             with col_srv:
                 serveur_cible = st.text_input(
                     "Nom d'hôte du serveur",
-                    value=_default_srv,
                     key="conn_server_cible",
                 )
             with col_http:
                 http_path_cible = st.text_input(
                     "Chemin HTTP (v-http-path)",
-                    value=_default_http,
                     key="conn_http_cible",
                 )
 
