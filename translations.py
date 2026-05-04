@@ -58,6 +58,20 @@ TRANSLATIONS = {
         "filtres_success":  "✅ {} filtre(s) modifié(s).",
         "filtres_download": "⬇️ Télécharger le fichier modifié",
         "filtres_suffix":   "_filtres",
+        # § Ajouter des filtres
+        "filtres_add_title":    "Ajouter des filtres aux dashboards",
+        "filtres_add_caption":  (
+            "Pour chaque dashboard, sélectionnez la feuille source et les champs "
+            "à ajouter comme filtres dans le panneau gauche."
+        ),
+        "filtres_add_no_dashboards": "Aucun dashboard avec des feuilles détecté dans ce fichier.",
+        "filtres_add_sheet_label":   "Feuille source",
+        "filtres_add_fields_label":  "Champs à ajouter comme filtres",
+        "filtres_add_no_fields":     "Aucun champ disponible pour cette feuille.",
+        "filtres_add_btn":     "➕ Ajouter les filtres et télécharger",
+        "filtres_add_success": "✅ {} filtre(s) ajouté(s) au(x) dashboard(s).",
+        "filtres_add_download": "⬇️ Télécharger le fichier modifié",
+        "filtres_add_suffix":   "_filtres_ajoutés",
         # ── Outil 3 — Connexion ────────────────────────────────────
         "conn_no_databricks":   "Aucune connexion avec un catalogue Databricks détectée dans ce fichier.",
         "conn_detected_title":  "Connexions détectées",
@@ -168,6 +182,20 @@ TRANSLATIONS = {
         "filtres_success":  "✅ {} filter(s) modified.",
         "filtres_download": "⬇️ Download modified file",
         "filtres_suffix":   "_filters",
+        # § Add filters
+        "filtres_add_title":    "Add Filters to Dashboards",
+        "filtres_add_caption":  (
+            "For each dashboard, select the source sheet and the fields "
+            "to add as filters in the left panel."
+        ),
+        "filtres_add_no_dashboards": "No dashboard with sheets detected in this file.",
+        "filtres_add_sheet_label":   "Source sheet",
+        "filtres_add_fields_label":  "Fields to add as filters",
+        "filtres_add_no_fields":     "No fields available for this sheet.",
+        "filtres_add_btn":     "➕ Add filters and download",
+        "filtres_add_success": "✅ {} filter(s) added to dashboard(s).",
+        "filtres_add_download": "⬇️ Download modified file",
+        "filtres_add_suffix":   "_filters_added",
         # ── Tool 3 — Connection ────────────────────────────────────
         "conn_no_databricks":   "No connection with a Databricks catalog detected in this file.",
         "conn_detected_title":  "Detected connections",

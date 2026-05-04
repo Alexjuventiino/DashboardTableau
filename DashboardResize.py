@@ -4,7 +4,10 @@ import pandas as pd
 
 from utils import charger_contenu_xml, parser_xml
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
-from outil2_filtres import MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres
+from outil2_filtres import (
+    MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
+    recuperer_feuilles_par_dashboard, recuperer_champs_feuille, ajouter_filtres_dashboards,
+)
 from outil3_connexion import (
     recuperer_catalogues, remplacer_catalogue,
     recuperer_tables_sql, init_df_tables, remplacer_tables,
@@ -51,7 +54,8 @@ def main():
 
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
-        for key in ["df_resize", "df_filtres", "filtres_source", "catalogues", "tables_sql", "df_tables"]:
+        for key in ["df_resize", "df_filtres", "filtres_source", "feuilles_par_dashboard",
+                    "catalogues", "tables_sql", "df_tables"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
@@ -182,8 +186,9 @@ def main():
         else:
             if "filtres_source" not in st.session_state:
                 filtres = recuperer_filtres(xml_content)
-                st.session_state["filtres_source"] = filtres
-                st.session_state["df_filtres"]     = init_df_filtres(filtres)
+                st.session_state["filtres_source"]          = filtres
+                st.session_state["df_filtres"]              = init_df_filtres(filtres)
+                st.session_state["feuilles_par_dashboard"]  = recuperer_feuilles_par_dashboard(xml_content)
 
             filtres_source = st.session_state["filtres_source"]
 
@@ -266,6 +271,81 @@ def main():
                             file_name=f"{nom_base}{T['filtres_suffix']}.twb",
                             mime="application/xml",
                             key="dl_filtres",
+                        )
+                    except ValueError as e:
+                        st.error(str(e))
+
+            # ── Ajouter des filtres aux dashboards ──────────────────
+            st.divider()
+            st.subheader(T["filtres_add_title"])
+            st.caption(T["filtres_add_caption"])
+
+            feuilles_par_dash = st.session_state.get("feuilles_par_dashboard", {})
+            if not feuilles_par_dash:
+                st.info(T["filtres_add_no_dashboards"])
+            else:
+                add_specs = []
+                for dash_name, sheets in feuilles_par_dash.items():
+                    with st.expander(dash_name):
+                        sheet_key  = f"add_filter_sheet_{dash_name}"
+                        fields_key = f"add_filter_fields_{dash_name}"
+
+                        selected_sheet = st.selectbox(
+                            T["filtres_add_sheet_label"],
+                            options=sheets,
+                            key=sheet_key,
+                        )
+
+                        champs_dispo = recuperer_champs_feuille(xml_content, selected_sheet)
+                        if not champs_dispo:
+                            st.info(T["filtres_add_no_fields"])
+                        else:
+                            # Dédoublonnage par instance_name, label = caption ou nom déduit
+                            seen_inst: set = set()
+                            labels:    list = []
+                            instances: list = []
+                            for fi in champs_dispo:
+                                inst = fi['instance_name']
+                                if inst in seen_inst:
+                                    continue
+                                seen_inst.add(inst)
+                                labels.append(fi['display_name'])
+                                instances.append(inst)
+
+                            selected_labels = st.multiselect(
+                                T["filtres_add_fields_label"],
+                                options=labels,
+                                key=fields_key,
+                            )
+                            selected_instances = [
+                                instances[labels.index(lbl)]
+                                for lbl in selected_labels
+                            ]
+                            if selected_instances:
+                                add_specs.append({
+                                    "dashboard": dash_name,
+                                    "feuille":   selected_sheet,
+                                    "champs":    selected_instances,
+                                })
+
+                st.write("")
+                if st.button(
+                    T["filtres_add_btn"],
+                    type="primary",
+                    disabled=not add_specs,
+                    key="btn_add_filters",
+                ):
+                    try:
+                        fichier_add, nb_add = ajouter_filtres_dashboards(xml_content, add_specs)
+                        st.success(T["filtres_add_success"].format(nb_add))
+                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
+                        nom_ext  = ".tds" if _is_tds else ".twb"
+                        st.download_button(
+                            label=T["filtres_add_download"],
+                            data=fichier_add,
+                            file_name=f"{nom_base}{T['filtres_add_suffix']}{nom_ext}",
+                            mime="application/xml",
+                            key="dl_add_filters",
                         )
                     except ValueError as e:
                         st.error(str(e))

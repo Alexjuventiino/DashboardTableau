@@ -1,4 +1,5 @@
 import re
+import xml.etree.ElementTree as ET
 import pandas as pd
 from utils import parser_xml, serialiser_xml
 
@@ -113,3 +114,237 @@ def appliquer_modifications_filtres(xml_content: bytes, df_edited: pd.DataFrame,
                 zone.attrib.pop("show-apply", None)
 
     return serialiser_xml(tree)
+
+
+# ─────────────────────────────────────────────────────────────
+# AJOUTER DES FILTRES AUX DASHBOARDS
+# ─────────────────────────────────────────────────────────────
+
+def recuperer_feuilles_par_dashboard(xml_content) -> dict:
+    """
+    Retourne {dashboard_name: [sheet_name, ...]} — les feuilles utilisées dans
+    chaque dashboard (hors feuilles utilitaires commençant par '_').
+    """
+    tree = parser_xml(xml_content)
+    root = tree.getroot()
+    result = {}
+    for dash in root.iter('dashboard'):
+        if dash.get('type'):
+            continue
+        dash_name = dash.get('name', '')
+        sheets_seen = set()
+        sheets = []
+        for z in dash.iter('zone'):
+            zname = z.get('name', '')
+            tv2   = z.get('type-v2', '')
+            if zname and tv2 == '' and not zname.startswith('_'):
+                if zname not in sheets_seen:
+                    sheets_seen.add(zname)
+                    sheets.append(zname)
+        if sheets:
+            result[dash_name] = sheets
+    return result
+
+
+def recuperer_champs_feuille(xml_content, feuille: str) -> list:
+    """
+    Retourne la liste des champs disponibles dans une feuille pour être
+    ajoutés comme filtres de dashboard.
+
+    Chaque entrée :
+      {"datasource", "instance_name", "field_name", "display_name",
+       "datatype", "type", "column_attribs", "instance_attribs"}
+    """
+    tree = parser_xml(xml_content)
+    root = tree.getroot()
+    champs = []
+    for ws in root.iter('worksheet'):
+        if ws.get('name', '') != feuille:
+            continue
+        for dep in ws.iter('datasource-dependencies'):
+            ds_name = dep.get('datasource', '')
+            if ds_name == 'Parameters':
+                continue
+            col_lookup = {c.get('name', ''): dict(c.attrib) for c in dep.findall('column')}
+            for ci in dep.findall('column-instance'):
+                if ci.get('derivation', '') != 'None':
+                    continue
+                instance_name = ci.get('name', '')
+                field_name    = ci.get('column', '')
+                ci_type       = ci.get('type', 'nominal')
+                col_attribs   = col_lookup.get(field_name, {})
+                display       = col_attribs.get('caption', '') or extraire_nom_champ(instance_name)
+                champs.append({
+                    'datasource':       ds_name,
+                    'instance_name':    instance_name,
+                    'field_name':       field_name,
+                    'display_name':     display,
+                    'datatype':         col_attribs.get('datatype', 'string'),
+                    'type':             ci_type,
+                    'column_attribs':   col_attribs,
+                    'instance_attribs': dict(ci.attrib),
+                })
+        break
+    return champs
+
+
+def _max_zone_id(root) -> int:
+    max_id = 0
+    for z in root.iter('zone'):
+        try:
+            id_val = int(z.get('id', '0'))
+            if id_val > max_id:
+                max_id = id_val
+        except (ValueError, TypeError):
+            pass
+    return max_id
+
+
+def _trouver_panneau_filtres(dash_elem):
+    """
+    Trouve le conteneur vertical (layout-flow vert) utilisé pour les filtres.
+    Stratégie : premier vert qui a déjà un enfant direct filter/paramctrl,
+    sinon le premier vert layout-flow trouvé.
+    """
+    for z in dash_elem.iter('zone'):
+        if z.get('type-v2') == 'layout-flow' and z.get('param') == 'vert':
+            for child in z:
+                if child.get('type-v2') in ('filter', 'paramctrl'):
+                    return z
+    for z in dash_elem.iter('zone'):
+        if z.get('type-v2') == 'layout-flow' and z.get('param') == 'vert':
+            return z
+    return None
+
+
+def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
+    """
+    spec_list : [{"dashboard": str, "feuille": str, "champs": [instance_name, ...]}]
+
+    Pour chaque spécification :
+    1. Ajoute column + column-instance dans les datasource-dependencies du dashboard.
+    2. Ajoute une zone filter dans le panneau vertical gauche.
+
+    Retourne (BytesIO, nb_filtres_ajoutés).
+    """
+    if not spec_list:
+        raise ValueError("Aucune spécification fournie.")
+
+    tree = parser_xml(xml_content)
+    root = tree.getroot()
+
+    # Pré-calcule les infos de champs par feuille
+    ws_fields: dict = {}
+    for ws in root.iter('worksheet'):
+        ws_name = ws.get('name', '')
+        ws_fields[ws_name] = {}
+        for dep in ws.iter('datasource-dependencies'):
+            ds_name = dep.get('datasource', '')
+            if ds_name == 'Parameters':
+                continue
+            col_lookup = {c.get('name', ''): dict(c.attrib) for c in dep.findall('column')}
+            for ci in dep.findall('column-instance'):
+                inst  = ci.get('name', '')
+                field = ci.get('column', '')
+                ws_fields[ws_name][inst] = {
+                    'datasource':       ds_name,
+                    'instance_name':    inst,
+                    'field_name':       field,
+                    'type':             ci.get('type', 'nominal'),
+                    'column_attribs':   col_lookup.get(field, {}),
+                    'instance_attribs': dict(ci.attrib),
+                }
+
+    nb_total = 0
+    next_id  = _max_zone_id(root) + 1
+
+    for spec in spec_list:
+        dash_name = spec['dashboard']
+        feuille   = spec['feuille']
+        champs    = spec.get('champs', [])
+        if not champs:
+            continue
+
+        dash_elem = next(
+            (d for d in root.iter('dashboard') if d.get('name', '') == dash_name),
+            None,
+        )
+        if dash_elem is None:
+            continue
+
+        sheet_fi = ws_fields.get(feuille, {})
+
+        def _get_dep(ds_name: str):
+            for dep in dash_elem.findall('datasource-dependencies'):
+                if dep.get('datasource', '') == ds_name:
+                    return dep
+            dep = ET.SubElement(dash_elem, 'datasource-dependencies')
+            dep.set('datasource', ds_name)
+            return dep
+
+        panel = _trouver_panneau_filtres(dash_elem)
+        if panel is None:
+            continue
+
+        existing_params = {
+            child.get('param', '')
+            for child in panel
+            if child.get('type-v2') in ('filter', 'paramctrl')
+        }
+
+        for instance_name in champs:
+            fi = sheet_fi.get(instance_name)
+            if fi is None:
+                continue
+
+            ds_name   = fi['datasource']
+            param_val = f"[{ds_name}].{instance_name}"
+
+            if param_val in existing_params:
+                continue
+
+            dep      = _get_dep(ds_name)
+            col_name = fi['field_name']
+
+            if col_name not in {c.get('name', '') for c in dep.findall('column')}:
+                col_el = ET.SubElement(dep, 'column')
+                for k, v in fi['column_attribs'].items():
+                    col_el.set(k, v)
+
+            if instance_name not in {c.get('name', '') for c in dep.findall('column-instance')}:
+                ci_el = ET.SubElement(dep, 'column-instance')
+                for k, v in fi['instance_attribs'].items():
+                    ci_el.set(k, v)
+
+            z = ET.SubElement(panel, 'zone')
+            z.set('h', '6222')
+            z.set('id', str(next_id))
+            next_id += 1
+
+            if fi['type'] == 'quantitative':
+                z.set('mode', 'compact')
+            else:
+                z.set('mode', 'checkdropdown')
+                z.set('show-all', 'false')
+                z.set('show-apply', 'true')
+
+            z.set('name', feuille)
+            z.set('param', param_val)
+            z.set('type-v2', 'filter')
+            z.set('values', 'database')
+            z.set('w', '11716')
+            z.set('x', '0')
+            z.set('y', '0')
+            ET.SubElement(z, 'zone-style')
+
+            existing_params.add(param_val)
+            nb_total += 1
+
+    if nb_total == 0:
+        raise ValueError(
+            "Aucun filtre ajouté — les champs sélectionnés sont déjà présents "
+            "ou introuvables dans la feuille source."
+        )
+
+    return serialiser_xml(tree), nb_total
+
