@@ -275,6 +275,14 @@ def main():
             st.session_state["tables_sql"] = recuperer_tables_sql(xml_content)
             st.session_state["df_tables"]  = init_df_tables(st.session_state["tables_sql"])
 
+        # Nettoyage des lignes Extract éventuellement présentes dans un état
+        # de session mis en cache par une ancienne version du code
+        if "df_tables" in st.session_state:
+            _df_chk = st.session_state["df_tables"]
+            if _df_chk["Schéma"].str.lower().eq("extract").any():
+                st.session_state["tables_sql"] = recuperer_tables_sql(xml_content)
+                st.session_state["df_tables"]  = init_df_tables(st.session_state["tables_sql"])
+
         catalogues = st.session_state["catalogues"]
 
         if not catalogues:
