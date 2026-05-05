@@ -630,8 +630,8 @@ def main():
     st.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.78rem; padding: 4px 0 12px 0;">
-            Boîte à outils Tableau · <strong>version dev</strong> &nbsp;|&nbsp;
-            Conçu par <strong>Idir SAIDANI</strong>
+            Tableau Toolkit · <strong>dev version</strong> &nbsp;|&nbsp;
+            © Idir Saidani &amp; AI
         </div>
         """,
         unsafe_allow_html=True,
