@@ -2,6 +2,11 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 import zipfile
 
+# Préserver le préfixe 'user:' natif de Tableau lors de la re-sérialisation.
+# Sans ça, Python ET remplace xmlns:user par xmlns:ns0, ce qui casse les
+# attributs Tableau (user:ui-marker, user:ui-manual-selection, etc.).
+ET.register_namespace('user', 'http://www.tableausoftware.com/xml/user')
+
 
 def extraire_twb_depuis_twbx(file_bytes: bytes) -> bytes:
     with zipfile.ZipFile(BytesIO(file_bytes)) as z:
