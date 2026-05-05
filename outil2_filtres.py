@@ -200,18 +200,20 @@ def _max_zone_id(root) -> int:
     return max_id
 
 
-def _trouver_panneau_filtres(dash_elem):
+def _trouver_panneau_filtres(zones_elem):
     """
-    Trouve le conteneur vertical (layout-flow vert) utilisé pour les filtres.
-    Stratégie : premier vert qui a déjà un enfant direct filter/paramctrl,
-    sinon le premier vert layout-flow trouvé.
+    Cherche le layout-flow vert pour les filtres dans <zones> uniquement
+    (pas dans devicelayouts).
+    Priorité : vert qui a déjà un enfant filter/paramctrl, sinon premier vert.
     """
-    for z in dash_elem.iter('zone'):
+    if zones_elem is None:
+        return None
+    for z in zones_elem.iter('zone'):
         if z.get('type-v2') == 'layout-flow' and z.get('param') == 'vert':
             for child in z:
                 if child.get('type-v2') in ('filter', 'paramctrl'):
                     return z
-    for z in dash_elem.iter('zone'):
+    for z in zones_elem.iter('zone'):
         if z.get('type-v2') == 'layout-flow' and z.get('param') == 'vert':
             return z
     return None
@@ -295,7 +297,47 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             dash_elem.insert(zones_idx, dep)
             return dep
 
-        panel = _trouver_panneau_filtres(dash_elem)
+        zones_el = dash_elem.find('zones')
+        panel = _trouver_panneau_filtres(zones_el)
+
+        # Si aucun panneau filtres n'existe, on en crée un
+        if panel is None and zones_el is not None:
+            layout_basic = zones_el.find('zone')  # premier <zone> direct
+            if layout_basic is not None:
+                # 1. Vert filtre (le futur panel)
+                filter_vert = ET.Element('zone')
+                filter_vert.set('id', str(next_id)); next_id += 1
+                filter_vert.set('param', 'vert')
+                filter_vert.set('type-v2', 'layout-flow')
+                ET.SubElement(filter_vert, 'zone-style')
+
+                # 2. Vert contenu — récupère les zones existantes
+                content_vert = ET.Element('zone')
+                content_vert.set('id', str(next_id)); next_id += 1
+                content_vert.set('param', 'vert')
+                content_vert.set('type-v2', 'layout-flow')
+                for cz in [c for c in list(layout_basic) if c.tag == 'zone']:
+                    layout_basic.remove(cz)
+                    content_vert.append(cz)
+                ET.SubElement(content_vert, 'zone-style')
+
+                # 3. Conteneur horz : filtre_vert + content_vert
+                horz = ET.Element('zone')
+                horz.set('id', str(next_id)); next_id += 1
+                horz.set('param', 'horz')
+                horz.set('type-v2', 'layout-flow')
+                horz.append(filter_vert)
+                horz.append(content_vert)
+                ET.SubElement(horz, 'zone-style')
+
+                # 4. Insère le horz avant zone-style dans layout-basic
+                zs_idx = next(
+                    (i for i, c in enumerate(layout_basic) if c.tag == 'zone-style'),
+                    len(list(layout_basic)),
+                )
+                layout_basic.insert(zs_idx, horz)
+                panel = filter_vert
+
         if panel is None:
             continue
 
