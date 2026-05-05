@@ -304,18 +304,36 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
         if panel is None and zones_el is not None:
             layout_basic = zones_el.find('zone')  # premier <zone> direct
             if layout_basic is not None:
+                # Récupère les dimensions de la zone contenu originale
+                orig_zone = next((c for c in layout_basic if c.tag == 'zone'), None)
+                oz_x = orig_zone.get('x', '0')   if orig_zone is not None else '0'
+                oz_y = orig_zone.get('y', '0')   if orig_zone is not None else '0'
+                oz_w = orig_zone.get('w', '98000') if orig_zone is not None else '98000'
+                oz_h = orig_zone.get('h', '98000') if orig_zone is not None else '98000'
+                # Largeur du panneau filtres ≈ 15 % de la largeur totale
+                filter_w = max(8000, int(int(oz_w) * 0.15))
+                content_w = int(oz_w) - filter_w
+
                 # 1. Vert filtre (le futur panel)
                 filter_vert = ET.Element('zone')
                 filter_vert.set('id', str(next_id)); next_id += 1
+                filter_vert.set('h', oz_h)
                 filter_vert.set('param', 'vert')
                 filter_vert.set('type-v2', 'layout-flow')
+                filter_vert.set('w', str(filter_w))
+                filter_vert.set('x', '0')
+                filter_vert.set('y', '0')
                 ET.SubElement(filter_vert, 'zone-style')
 
                 # 2. Vert contenu — récupère les zones existantes
                 content_vert = ET.Element('zone')
                 content_vert.set('id', str(next_id)); next_id += 1
+                content_vert.set('h', oz_h)
                 content_vert.set('param', 'vert')
                 content_vert.set('type-v2', 'layout-flow')
+                content_vert.set('w', str(content_w))
+                content_vert.set('x', str(filter_w))
+                content_vert.set('y', '0')
                 for cz in [c for c in list(layout_basic) if c.tag == 'zone']:
                     layout_basic.remove(cz)
                     content_vert.append(cz)
@@ -324,8 +342,12 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
                 # 3. Conteneur horz : filtre_vert + content_vert
                 horz = ET.Element('zone')
                 horz.set('id', str(next_id)); next_id += 1
+                horz.set('h', oz_h)
                 horz.set('param', 'horz')
                 horz.set('type-v2', 'layout-flow')
+                horz.set('w', oz_w)
+                horz.set('x', oz_x)
+                horz.set('y', oz_y)
                 horz.append(filter_vert)
                 horz.append(content_vert)
                 ET.SubElement(horz, 'zone-style')
