@@ -411,6 +411,12 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
                 show_apply = fi['type'] == 'nominal'
                 show_all   = True
 
+            # typeinlist = saisie texte libre → ne charge pas les valeurs depuis la DB
+            values_attr = 'typed-value' if mode_xml == 'typeinlist' else 'database'
+            # sélection unique → pas de "Tout" (show-all n'a pas de sens)
+            if mode_xml in ('dropdown', 'singlevalue'):
+                show_all = False
+
             # Insérer AVANT <zone-style> (doit rester le dernier enfant)
             zone_style_idx = next(
                 (i for i, c in enumerate(panel) if c.tag == 'zone-style'),
@@ -432,7 +438,7 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             z.set('name', feuille)
             z.set('param', param_val)
             z.set('type-v2', 'filter')
-            z.set('values', 'database')
+            z.set('values', values_attr)
             z.set('w', '11716')
             z.set('x', '0')
             z.set('y', '0')
