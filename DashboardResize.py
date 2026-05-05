@@ -5,7 +5,7 @@ import pandas as pd
 from utils import charger_contenu_xml, parser_xml
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
 from outil2_filtres import (
-    MODES_LABELS, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
+    MODES_LABELS, MODES_REVERSE, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
     recuperer_feuilles_par_dashboard, recuperer_champs_feuille, ajouter_filtres_dashboards,
 )
 from outil3_connexion import (
@@ -322,10 +322,51 @@ def main():
                                 for lbl in selected_labels
                             ]
                             if selected_instances:
+                                # Table de configuration par champ
+                                fi_by_inst = {fi['instance_name']: fi for fi in champs_dispo}
+                                cfg_rows = []
+                                for inst in selected_instances:
+                                    fi   = fi_by_inst.get(inst, {})
+                                    nom  = labels[instances.index(inst)]
+                                    is_q = fi.get('type', 'nominal') == 'quantitative'
+                                    cfg_rows.append({
+                                        "_inst": inst,
+                                        T["filtres_add_col_champ"]: nom,
+                                        T["filtres_add_col_mode"]:  MODES_LABELS[1] if is_q else MODES_LABELS[3],
+                                        T["filtres_add_col_apply"]: not is_q,
+                                        T["filtres_add_col_all"]:   True,
+                                    })
+
+                                cfg_key = f"add_cfg_{dash_name}_{hash(tuple(selected_instances))}"
+                                edited_cfg = st.data_editor(
+                                    pd.DataFrame(cfg_rows),
+                                    key=cfg_key,
+                                    column_config={
+                                        "_inst": None,
+                                        T["filtres_add_col_champ"]: st.column_config.TextColumn(disabled=True),
+                                        T["filtres_add_col_mode"]:  st.column_config.SelectboxColumn(
+                                            options=MODES_LABELS, required=True,
+                                        ),
+                                        T["filtres_add_col_apply"]: st.column_config.CheckboxColumn(),
+                                        T["filtres_add_col_all"]:   st.column_config.CheckboxColumn(),
+                                    },
+                                    hide_index=True,
+                                    use_container_width=True,
+                                )
+
+                                champs_cfg = [
+                                    {
+                                        "instance_name": row["_inst"],
+                                        "mode_xml":      MODES_REVERSE.get(row[T["filtres_add_col_mode"]], ""),
+                                        "show_apply":    bool(row[T["filtres_add_col_apply"]]),
+                                        "show_all":      bool(row[T["filtres_add_col_all"]]),
+                                    }
+                                    for _, row in edited_cfg.iterrows()
+                                ]
                                 add_specs.append({
                                     "dashboard": dash_name,
                                     "feuille":   selected_sheet,
-                                    "champs":    selected_instances,
+                                    "champs":    champs_cfg,
                                 })
 
                 st.write("")

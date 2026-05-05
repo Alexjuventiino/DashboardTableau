@@ -72,6 +72,11 @@ TRANSLATIONS = {
         "filtres_add_success": "✅ {} filtre(s) ajouté(s) au(x) dashboard(s).",
         "filtres_add_download": "⬇️ Télécharger le fichier modifié",
         "filtres_add_suffix":   "_filtres_ajoutés",
+        # colonnes table config
+        "filtres_add_col_champ": "Champ",
+        "filtres_add_col_mode":  "Mode",
+        "filtres_add_col_apply": "Bouton Appliquer",
+        "filtres_add_col_all":   "Valeur Tout",
         # ── Outil 3 — Connexion ────────────────────────────────────
         "conn_no_databricks":   "Aucune connexion avec un catalogue Databricks détectée dans ce fichier.",
         "conn_detected_title":  "Connexions détectées",
@@ -196,6 +201,11 @@ TRANSLATIONS = {
         "filtres_add_success": "✅ {} filter(s) added to dashboard(s).",
         "filtres_add_download": "⬇️ Download modified file",
         "filtres_add_suffix":   "_filters_added",
+        # config table columns
+        "filtres_add_col_champ": "Field",
+        "filtres_add_col_mode":  "Mode",
+        "filtres_add_col_apply": "Apply Button",
+        "filtres_add_col_all":   "Show All",
         # ── Tool 3 — Connection ────────────────────────────────────
         "conn_no_databricks":   "No connection with a Databricks catalog detected in this file.",
         "conn_detected_title":  "Detected connections",

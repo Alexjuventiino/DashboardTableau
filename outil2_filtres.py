@@ -6,6 +6,7 @@ from utils import parser_xml, serialiser_xml
 
 MODES = {
     "":              "Liste complète (défaut)",
+    "compact":       "Compact (plage numérique)",
     "dropdown":      "Liste déroulante — sélection unique",
     "checkdropdown": "Liste déroulante — multi-sélection",
     "typeinlist":    "Saisie texte",
@@ -369,7 +370,13 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             if child.get('type-v2') in ('filter', 'paramctrl')
         }
 
-        for instance_name in champs:
+        for champ_spec in champs:
+            # champ_spec peut être une str (instance_name) ou un dict de config
+            if isinstance(champ_spec, dict):
+                instance_name = champ_spec['instance_name']
+            else:
+                instance_name = champ_spec
+
             fi = sheet_fi.get(instance_name)
             if fi is None:
                 continue
@@ -394,6 +401,16 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
                     for k, v in fi['instance_attribs'].items():
                         ci_el.set(k, v)
 
+            # Résolution de la config mode/show_apply/show_all
+            if isinstance(champ_spec, dict):
+                mode_xml   = champ_spec.get('mode_xml',   'compact' if fi['type'] == 'quantitative' else 'checkdropdown')
+                show_apply = champ_spec.get('show_apply', fi['type'] == 'nominal')
+                show_all   = champ_spec.get('show_all',   True)
+            else:
+                mode_xml   = 'compact' if fi['type'] == 'quantitative' else 'checkdropdown'
+                show_apply = fi['type'] == 'nominal'
+                show_all   = True
+
             # Insérer AVANT <zone-style> (doit rester le dernier enfant)
             zone_style_idx = next(
                 (i for i, c in enumerate(panel) if c.tag == 'zone-style'),
@@ -405,11 +422,11 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             z.set('id', str(next_id))
             next_id += 1
 
-            if fi['type'] == 'quantitative':
-                z.set('mode', 'compact')
-            else:
-                z.set('mode', 'checkdropdown')
-                z.set('show-all', 'false')
+            if mode_xml:
+                z.set('mode', mode_xml)
+            if show_all:
+                z.set('show-all', 'true')
+            if show_apply:
                 z.set('show-apply', 'true')
 
             z.set('name', feuille)
