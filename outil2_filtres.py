@@ -446,7 +446,9 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
             z.set('w', '11716')
             z.set('x', '0')
             z.set('y', '0')
-            ET.SubElement(z, 'zone-style')
+            # typeinlist doit être une zone auto-fermante (pas de <zone-style>)
+            if mode_xml != 'typeinlist':
+                ET.SubElement(z, 'zone-style')
 
             existing_params.add(param_val)
             nb_total += 1
