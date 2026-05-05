@@ -413,9 +413,11 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
 
             # typeinlist = saisie texte libre → ne charge pas les valeurs depuis la DB
             values_attr = 'typed-value' if mode_xml == 'typeinlist' else 'database'
-            # sélection unique → pas de "Tout" (show-all n'a pas de sens)
-            if mode_xml in ('dropdown', 'singlevalue'):
+            # sélection unique ou saisie texte → show-all et show-apply sans effet
+            if mode_xml in ('dropdown', 'singlevalue', 'typeinlist'):
                 show_all = False
+            if mode_xml == 'typeinlist':
+                show_apply = False
 
             # Insérer AVANT <zone-style> (doit rester le dernier enfant)
             zone_style_idx = next(
