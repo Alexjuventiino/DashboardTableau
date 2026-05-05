@@ -432,10 +432,12 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
 
             if mode_xml:
                 z.set('mode', mode_xml)
-            if show_all:
-                z.set('show-all', 'true')
-            if show_apply:
-                z.set('show-apply', 'true')
+            # typeinlist : aucun show-all ni show-apply (les omettre complètement)
+            # tous les autres modes : show-all doit être écrit explicitement ('true' ou 'false')
+            if mode_xml != 'typeinlist':
+                z.set('show-all', 'true' if show_all else 'false')
+                if show_apply:
+                    z.set('show-apply', 'true')
 
             z.set('name', feuille)
             z.set('param', param_val)
