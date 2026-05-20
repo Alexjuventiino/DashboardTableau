@@ -13,7 +13,7 @@ def extraire_perf_gantt(twbx_bytes: bytes) -> pd.DataFrame:
         if not candidats:
             raise ValueError("Aucun fichier perf_gantt.tab trouvé dans l'archive .twbx.")
         with z.open(candidats[0]) as f:
-            df = pd.read_csv(f, sep="|", low_memory=False)
+            df = pd.read_csv(f, sep="|", low_memory=False, on_bad_lines="skip")
     return _preparer(df)
 
 
