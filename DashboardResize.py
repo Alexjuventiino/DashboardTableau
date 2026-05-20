@@ -13,6 +13,11 @@ from outil3_connexion import (
     recuperer_tables_sql, init_df_tables, remplacer_tables,
     remplacer_serveur,
 )
+from outil4_performances import (
+    extraire_perf_gantt, calculer_kpis,
+    top_evenements_lents, resume_par_feuille, resume_par_type,
+    requetes_sans_cache,
+)
 from translations import TRANSLATIONS
 
 
@@ -38,11 +43,103 @@ def main():
     with _col_title:
         st.title(T["title"])
 
-    # Upload unique partagé entre les onglets
+    # Upload unique partagé entre les onglets 1–3
     xml_file = st.file_uploader(T["upload_label"], type=["twb", "twbx", "tds"])
     _is_tds = xml_file is not None and xml_file.name.endswith(".tds")
 
+    st.divider()
+    tab_resize, tab_filtres, tab_connexion, tab_perf = st.tabs(
+        [T["tab_resize"], T["tab_filters"], T["tab_connexion"], T["tab_perf"]]
+    )
+
+
+    # ════════════════════════════════════════════════════
+    # ONGLET 4 — PERFORMANCES
+    # ════════════════════════════════════════════════════
+    with tab_perf:
+        st.subheader(T["perf_title"])
+        st.caption(T["perf_caption"])
+
+        perf_file = st.file_uploader(
+            T["perf_upload_label"],
+            type=["twbx"],
+            key="perf_upload",
+        )
+
+        if perf_file is not None:
+            if st.session_state.get("perf_fichier_actuel") != perf_file.name:
+                st.session_state.pop("perf_df", None)
+                st.session_state["perf_fichier_actuel"] = perf_file.name
+
+            if "perf_df" not in st.session_state:
+                try:
+                    df_perf = extraire_perf_gantt(perf_file.read())
+                    st.session_state["perf_df"] = df_perf
+                except ValueError as e:
+                    st.error(T["perf_parse_error"].format(e))
+
+            if "perf_df" in st.session_state:
+                df_perf = st.session_state["perf_df"]
+
+                if df_perf.empty:
+                    st.warning(T["perf_no_data"])
+                else:
+                    kpis_data = calculer_kpis(df_perf)
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['temps_total']:.2f} s")
+                    col2.metric(T["perf_kpi_events"],      f"{kpis_data['nb_evenements']:,}")
+                    col3.metric(T["perf_kpi_queries"],     f"{kpis_data['nb_requetes']:,}")
+                    col4.metric(T["perf_kpi_cache_miss"],  f"{kpis_data['nb_cache_miss']:,}")
+                    col5.metric(T["perf_kpi_query_time"],  f"{kpis_data['temps_requetes']:.2f} s")
+
+                    st.divider()
+
+                    st.subheader(T["perf_top_slow_title"])
+                    st.caption(T["perf_top_slow_caption"])
+                    st.dataframe(
+                        top_evenements_lents(df_perf),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    st.divider()
+
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.subheader(T["perf_by_sheet_title"])
+                        df_sheet = resume_par_feuille(df_perf)
+                        if not df_sheet.empty:
+                            st.dataframe(df_sheet, use_container_width=True, hide_index=True)
+                        else:
+                            st.info(T["perf_no_sheets"])
+                    with col_b:
+                        st.subheader(T["perf_by_type_title"])
+                        st.caption(T["perf_by_type_caption"])
+                        st.dataframe(
+                            resume_par_type(df_perf),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+                    st.divider()
+
+                    st.subheader(T["perf_cache_miss_title"])
+                    st.caption(T["perf_cache_miss_caption"])
+                    df_miss = requetes_sans_cache(df_perf)
+                    if df_miss.empty:
+                        st.success(T["perf_cache_miss_none"])
+                    else:
+                        st.dataframe(df_miss, use_container_width=True, hide_index=True)
+
+
+    # Outils 1–3 : nécessitent un fichier classeur valide
     if xml_file is None:
+        with tab_resize:
+            st.info(T["upload_required"])
+        with tab_filtres:
+            st.info(T["upload_required"])
+        with tab_connexion:
+            st.info(T["upload_required"])
         return
 
     try:
@@ -58,9 +155,6 @@ def main():
                     "catalogues", "tables_sql", "df_tables"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
-
-    st.divider()
-    tab_resize, tab_filtres, tab_connexion = st.tabs([T["tab_resize"], T["tab_filters"], T["tab_connexion"]])
 
 
     # ════════════════════════════════════════════════════
