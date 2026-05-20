@@ -14,8 +14,8 @@ from outil3_connexion import (
     remplacer_serveur,
 )
 from outil4_performances import (
-    extraire_perf_gantt, calculer_kpis,
-    top_evenements_lents, resume_par_feuille, resume_par_type,
+    extraire_perf_gantt, filtrer_significatifs, calculer_kpis,
+    top_evenements_lents, resume_par_feuille, resume_par_categorie,
     requetes_sans_cache,
 )
 from translations import TRANSLATIONS
@@ -73,8 +73,8 @@ def main():
 
             if "perf_df" not in st.session_state:
                 try:
-                    df_perf = extraire_perf_gantt(perf_file.read())
-                    st.session_state["perf_df"] = df_perf
+                    df_raw = extraire_perf_gantt(perf_file.read())
+                    st.session_state["perf_df"] = filtrer_significatifs(df_raw)
                 except ValueError as e:
                     st.error(T["perf_parse_error"].format(e))
 
@@ -87,7 +87,7 @@ def main():
                     kpis_data = calculer_kpis(df_perf)
                     col1, col2, col3, col4, col5 = st.columns(5)
                     col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['temps_total']:.2f} s")
-                    col2.metric(T["perf_kpi_events"],      f"{kpis_data['nb_evenements']:,}")
+                    col2.metric(T["perf_kpi_events"],      f"{kpis_data['max_event']:.2f} s")
                     col3.metric(T["perf_kpi_queries"],     f"{kpis_data['nb_requetes']:,}")
                     col4.metric(T["perf_kpi_cache_miss"],  f"{kpis_data['nb_cache_miss']:,}")
                     col5.metric(T["perf_kpi_query_time"],  f"{kpis_data['temps_requetes']:.2f} s")
@@ -116,7 +116,7 @@ def main():
                         st.subheader(T["perf_by_type_title"])
                         st.caption(T["perf_by_type_caption"])
                         st.dataframe(
-                            resume_par_type(df_perf),
+                            resume_par_categorie(df_perf),
                             use_container_width=True,
                             hide_index=True,
                         )
