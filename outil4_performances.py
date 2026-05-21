@@ -302,10 +302,10 @@ def construire_prompt_llm(df: pd.DataFrame, kpis: dict, lang: str) -> str:
         )
 
 
-def analyser_avec_gemini(prompt: str, api_key: str) -> str:
-    """Envoie le prompt à l'API Gemini Flash et retourne la réponse textuelle."""
+def analyser_avec_gemini(prompt: str, api_key: str, model: str = "gemini-2.0-flash") -> str:
+    """Envoie le prompt à l'API Gemini et retourne la réponse textuelle."""
     import google.generativeai as genai  # import local : évite l'erreur si non installé
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+    mdl = genai.GenerativeModel(model)
+    response = mdl.generate_content(prompt)
     return response.text

@@ -156,8 +156,9 @@ def main():
                             with st.spinner(T["perf_llm_spinner"]):
                                 try:
                                     _prompt = construire_prompt_llm(df_perf, kpis_data, lang)
+                                    _model  = st.secrets.get("GEMINI_MODEL", "gemini-2.0-flash")
                                     st.session_state["perf_llm_result"] = analyser_avec_gemini(
-                                        _prompt, _gemini_key
+                                        _prompt, _gemini_key, _model
                                     )
                                 except Exception as _e:
                                     st.session_state["perf_llm_result"] = (
