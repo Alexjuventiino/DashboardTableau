@@ -109,13 +109,19 @@ def filtrer_significatifs(df: pd.DataFrame) -> pd.DataFrame:
 def calculer_kpis(df: pd.DataFrame) -> dict:
     """df doit être le dataframe filtré par filtrer_significatifs()."""
     mask_query = df["Catégorie"] == "Executing Query"
-    mask_miss  = mask_query & df["CacheHit"].isin(["false", "0", ""])
+    # CacheHit n'est renseigné que dans les enregistrements Tableau Server.
+    # On ne compte comme cache miss que les valeurs explicites ("false" / "0").
+    # Une valeur vide signifie que la donnée n'est pas disponible (desktop).
+    cache_vals  = df.loc[mask_query, "CacheHit"] if "CacheHit" in df.columns else pd.Series([], dtype=str)
+    cache_dispo = bool(cache_vals.str.len().gt(0).any())
+    mask_miss   = mask_query & df.get("CacheHit", pd.Series("", index=df.index)).isin(["false", "0"])
     return {
         "temps_total":    round(float(df["Elapsed Time"].sum()), 3) if not df.empty else 0.0,
         "max_event":      round(float(df["Elapsed Time"].max()), 3) if not df.empty else 0.0,
         "nb_requetes":    int(mask_query.sum()),
         "nb_cache_miss":  int(mask_miss.sum()),
         "temps_requetes": round(float(df.loc[mask_query, "Elapsed Time"].sum()), 3),
+        "cache_dispo":    cache_dispo,
     }
 
 
@@ -229,7 +235,7 @@ def requetes_sans_cache(df: pd.DataFrame) -> pd.DataFrame:
     """Requêtes SQL exécutées sans cache (CacheHit = false), triées par durée."""
     mask = (
         (df["Catégorie"] == "Executing Query")
-        & df["CacheHit"].isin(["false", "0", ""])
+        & df.get("CacheHit", pd.Series("", index=df.index)).isin(["false", "0"])
     )
     voulues = ["Catégorie", "Worksheet", "Dashboard", "DataSource Name", "Elapsed Time"]
     cols = [c for c in voulues if c in df.columns]

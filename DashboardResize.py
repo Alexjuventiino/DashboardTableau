@@ -89,7 +89,8 @@ def main():
                     col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['temps_total']:.2f} s")
                     col2.metric(T["perf_kpi_events"],      f"{kpis_data['max_event']:.2f} s")
                     col3.metric(T["perf_kpi_queries"],     f"{kpis_data['nb_requetes']:,}")
-                    col4.metric(T["perf_kpi_cache_miss"],  f"{kpis_data['nb_cache_miss']:,}")
+                    cache_miss_val = f"{kpis_data['nb_cache_miss']:,}" if kpis_data.get("cache_dispo") else "N/A"
+                    col4.metric(T["perf_kpi_cache_miss"],  cache_miss_val)
                     col5.metric(T["perf_kpi_query_time"],  f"{kpis_data['temps_requetes']:.2f} s")
 
                     st.divider()
@@ -132,11 +133,14 @@ def main():
 
                     st.subheader(T["perf_cache_miss_title"])
                     st.caption(T["perf_cache_miss_caption"])
-                    df_miss = requetes_sans_cache(df_perf)
-                    if df_miss.empty:
-                        st.success(T["perf_cache_miss_none"])
+                    if not kpis_data.get("cache_dispo"):
+                        st.info(T["perf_cache_miss_na"])
                     else:
-                        st.dataframe(df_miss, use_container_width=True, hide_index=True)
+                        df_miss = requetes_sans_cache(df_perf)
+                        if df_miss.empty:
+                            st.success(T["perf_cache_miss_none"])
+                        else:
+                            st.dataframe(df_miss, use_container_width=True, hide_index=True)
 
 
     # Outils 1–3 : nécessitent un fichier classeur valide
