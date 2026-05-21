@@ -535,9 +535,9 @@ def main():
             if not filtres_source:
                 st.info(T["filtres_no_filter"])
             else:
-                # Appliquer à tous / sélection
+                # Appliquer à tous
                 st.subheader(T["filtres_reassoc_apply_all_title"])
-                col_ra, col_rb, col_rc = st.columns([2, 1, 1])
+                col_ra, col_rb = st.columns([2, 1])
                 with col_ra:
                     feuille_globale = st.selectbox(
                         T["filtres_reassoc_common_sheet"],
@@ -547,19 +547,6 @@ def main():
                         key="reassoc_global_sheet",
                     )
                 with col_rb:
-                    st.write("")
-                    st.write("")
-                    if st.button(T["filtres_reassoc_select_all"], use_container_width=True, key="reassoc_select_all"):
-                        df_r = st.session_state["df_reassociation"].copy()
-                        df_r["Modifier"] = True
-                        st.session_state["df_reassociation"] = df_r
-                        st.rerun()
-                    if st.button(T["filtres_reassoc_deselect_all"], use_container_width=True, key="reassoc_deselect_all"):
-                        df_r = st.session_state["df_reassociation"].copy()
-                        df_r["Modifier"] = False
-                        st.session_state["df_reassociation"] = df_r
-                        st.rerun()
-                with col_rc:
                     st.write("")
                     st.write("")
                     if st.button(T["filtres_reassoc_btn_apply_all"], use_container_width=True, key="reassoc_apply_all"):
@@ -584,6 +571,11 @@ def main():
                     mask_r = df_full_r["Dashboard"] == dash_name_r
                     sub_df_r = df_full_r[mask_r]
                     with st.expander(dash_name_r):
+                        if st.button(T["filtres_reassoc_select_all"], key=f"reassoc_sel_all_{dash_name_r}"):
+                            df_r = st.session_state["df_reassociation"].copy()
+                            df_r.loc[mask_r, "Modifier"] = True
+                            st.session_state["df_reassociation"] = df_r
+                            st.rerun()
                         edited_sub_r = st.data_editor(
                             sub_df_r,
                             column_config={
