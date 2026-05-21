@@ -10,7 +10,7 @@ import pandas as pd
 def _categoriser(event_name: str) -> str:
     """Mappe un Event Name vers la catégorie du dashboard Tableau Performance."""
     n = str(event_name).lower()
-    if "query-batch.process" in n or "execute-query" in n:
+    if "query-batch.process" in n or "execute-query" in n or "process-query-batch" in n:
         return "Executing Query"
     if n == "sort":
         return "Sorting Data"
