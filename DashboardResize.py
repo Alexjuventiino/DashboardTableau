@@ -7,6 +7,7 @@ from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_d
 from outil2_filtres import (
     MODES_LABELS, MODES_REVERSE, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
     recuperer_feuilles_par_dashboard, recuperer_champs_feuille, ajouter_filtres_dashboards,
+    recuperer_toutes_feuilles, init_df_reassociation, reassocier_feuille_filtres,
 )
 from outil3_connexion import (
     recuperer_catalogues, remplacer_catalogue,
@@ -188,7 +189,8 @@ def main():
     # Réinitialiser si le fichier change
     if st.session_state.get("fichier_actuel") != xml_file.name:
         for key in ["df_resize", "df_filtres", "filtres_source", "feuilles_par_dashboard",
-                    "catalogues", "tables_sql", "df_tables"]:
+                    "catalogues", "tables_sql", "df_tables",
+                    "df_reassociation", "toutes_feuilles"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
 
@@ -319,6 +321,8 @@ def main():
                 st.session_state["filtres_source"]          = filtres
                 st.session_state["df_filtres"]              = init_df_filtres(filtres)
                 st.session_state["feuilles_par_dashboard"]  = recuperer_feuilles_par_dashboard(xml_content)
+                st.session_state["toutes_feuilles"]         = recuperer_toutes_feuilles(xml_content)
+                st.session_state["df_reassociation"]        = init_df_reassociation(filtres)
 
             filtres_source = st.session_state["filtres_source"]
 
@@ -517,6 +521,86 @@ def main():
                             file_name=f"{nom_base}{T['filtres_add_suffix']}{nom_ext}",
                             mime="application/xml",
                             key="dl_add_filters",
+                        )
+                    except ValueError as e:
+                        st.error(str(e))
+
+            # ── Changer la feuille source des filtres ───────────────
+            st.divider()
+            st.subheader(T["filtres_reassoc_title"])
+            st.caption(T["filtres_reassoc_caption"])
+
+            toutes_feuilles = st.session_state.get("toutes_feuilles", [])
+
+            if not filtres_source:
+                st.info(T["filtres_no_filter"])
+            else:
+                # Appliquer à tous
+                st.subheader(T["filtres_reassoc_apply_all_title"])
+                col_ra, col_rb = st.columns([2, 1])
+                with col_ra:
+                    feuille_globale = st.selectbox(
+                        T["filtres_reassoc_common_sheet"],
+                        options=toutes_feuilles,
+                        index=None,
+                        placeholder=T["filtres_reassoc_common_sheet_ph"],
+                        key="reassoc_global_sheet",
+                    )
+                with col_rb:
+                    st.write("")
+                    st.write("")
+                    if st.button(T["filtres_reassoc_btn_apply_all"], use_container_width=True, key="reassoc_apply_all"):
+                        if feuille_globale is None:
+                            st.warning(T["filtres_reassoc_warn_no_sheet"])
+                        else:
+                            df_r = st.session_state["df_reassociation"].copy()
+                            mask_r = df_r["Modifier"] == True
+                            if not mask_r.any():
+                                mask_r = pd.Series([True] * len(df_r), index=df_r.index)
+                            df_r.loc[mask_r, "Nouvelle feuille"] = feuille_globale
+                            st.session_state["df_reassociation"] = df_r
+                            st.rerun()
+
+                # Tableau
+                st.subheader(T["filtres_reassoc_table_title"])
+                st.caption(T["filtres_reassoc_table_caption"])
+                edited_reassoc = st.data_editor(
+                    st.session_state["df_reassociation"],
+                    column_config={
+                        "Modifier":         st.column_config.CheckboxColumn(T["filtres_reassoc_col_check"], width="small"),
+                        "Dashboard":        st.column_config.TextColumn(T["filtres_reassoc_col_dashboard"], disabled=True, width="medium"),
+                        "Champ":            st.column_config.TextColumn(T["filtres_reassoc_col_field"], disabled=True, width="medium"),
+                        "Feuille actuelle": st.column_config.TextColumn(T["filtres_reassoc_col_cur_sheet"], disabled=True, width="medium"),
+                        "Nouvelle feuille": st.column_config.SelectboxColumn(
+                            T["filtres_reassoc_col_new_sheet"],
+                            options=toutes_feuilles,
+                            width="medium",
+                        ),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_reassoc",
+                )
+
+                nb_coches_reassoc = int(edited_reassoc["Modifier"].sum())
+                s = "s" if nb_coches_reassoc > 1 else ""
+                st.write("")
+                if st.button(
+                    T["filtres_reassoc_btn"].format(n=nb_coches_reassoc, s=s),
+                    type="primary",
+                    disabled=nb_coches_reassoc == 0,
+                    key="btn_reassoc",
+                ):
+                    try:
+                        fichier_reassoc = reassocier_feuille_filtres(xml_content, edited_reassoc, filtres_source)
+                        st.success(T["filtres_reassoc_success"].format(nb_coches_reassoc))
+                        nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        st.download_button(
+                            label=T["filtres_reassoc_download"],
+                            data=fichier_reassoc,
+                            file_name=f"{nom_base}{T['filtres_reassoc_suffix']}.twb",
+                            mime="application/xml",
+                            key="dl_reassoc",
                         )
                     except ValueError as e:
                         st.error(str(e))

@@ -72,12 +72,33 @@ TRANSLATIONS = {
         "filtres_add_success": "✅ {} filtre(s) ajouté(s) au(x) dashboard(s).",
         "filtres_add_download": "⬇️ Télécharger le fichier modifié",
         "filtres_add_suffix":   "_filtres_ajoutés",
-        # colonnes table config
         "filtres_add_col_champ": "Champ",
         "filtres_add_col_mode":  "Mode",
         "filtres_add_col_apply": "Bouton Appliquer",
         "filtres_add_col_all":   "Valeur Tout",
-        # ── Outil 3 — Connexion ────────────────────────────────────
+        # § Réassocier la feuille source des filtres
+        "filtres_reassoc_title":           "Changer la feuille source des filtres",
+        "filtres_reassoc_caption":         (
+            "Permet de rattacher des filtres existants à une autre feuille source — utile après "
+            "la suppression ou le renommage d'une feuille, ou pour unifier tous les filtres "
+            "sur une même feuille."
+        ),
+        "filtres_reassoc_apply_all_title": "Appliquer à tous les filtres cochés",
+        "filtres_reassoc_common_sheet":    "Feuille commune",
+        "filtres_reassoc_common_sheet_ph": "Choisir une feuille...",
+        "filtres_reassoc_btn_apply_all":   "↓ Appliquer à tous",
+        "filtres_reassoc_warn_no_sheet":   "Sélectionne une feuille commune avant d'appliquer.",
+        "filtres_reassoc_table_title":     "Filtres",
+        "filtres_reassoc_table_caption":   "Cochez les filtres à modifier et choisissez la nouvelle feuille source.",
+        "filtres_reassoc_col_check":       "Modifier",
+        "filtres_reassoc_col_dashboard":   "Dashboard",
+        "filtres_reassoc_col_field":       "Champ",
+        "filtres_reassoc_col_cur_sheet":   "Feuille actuelle",
+        "filtres_reassoc_col_new_sheet":   "Nouvelle feuille",
+        "filtres_reassoc_btn":      "Réassocier ({n} filtre{s} sélectionné{s})",
+        "filtres_reassoc_success":  "✅ {} filtre(s) réassocié(s).",
+        "filtres_reassoc_download": "⬇️ Télécharger le fichier modifié",
+        "filtres_reassoc_suffix":   "_feuilles_filtres",
         "conn_no_databricks":   "Aucune connexion avec un catalogue Databricks détectée dans ce fichier.",
         "conn_detected_title":  "Connexions détectées",
         "conn_lbl_catalog": "Catalogue :",
@@ -232,12 +253,32 @@ TRANSLATIONS = {
         "filtres_add_success": "✅ {} filter(s) added to dashboard(s).",
         "filtres_add_download": "⬇️ Download modified file",
         "filtres_add_suffix":   "_filters_added",
-        # config table columns
         "filtres_add_col_champ": "Field",
         "filtres_add_col_mode":  "Mode",
         "filtres_add_col_apply": "Apply Button",
         "filtres_add_col_all":   "Show All",
-        # ── Tool 3 — Connection ────────────────────────────────────
+        # § Reassign filter source sheet
+        "filtres_reassoc_title":           "Change Filter Source Sheet",
+        "filtres_reassoc_caption":         (
+            "Reassign existing filters to a different source sheet — useful after deleting "
+            "or renaming a sheet, or to consolidate all filters onto a single sheet."
+        ),
+        "filtres_reassoc_apply_all_title": "Apply to all checked filters",
+        "filtres_reassoc_common_sheet":    "Common sheet",
+        "filtres_reassoc_common_sheet_ph": "Choose a sheet...",
+        "filtres_reassoc_btn_apply_all":   "↓ Apply to all",
+        "filtres_reassoc_warn_no_sheet":   "Select a common sheet before applying.",
+        "filtres_reassoc_table_title":     "Filters",
+        "filtres_reassoc_table_caption":   "Check the filters to modify and choose the new source sheet.",
+        "filtres_reassoc_col_check":       "Modify",
+        "filtres_reassoc_col_dashboard":   "Dashboard",
+        "filtres_reassoc_col_field":       "Field",
+        "filtres_reassoc_col_cur_sheet":   "Current sheet",
+        "filtres_reassoc_col_new_sheet":   "New sheet",
+        "filtres_reassoc_btn":      "Reassign ({n} filter{s} selected)",
+        "filtres_reassoc_success":  "✅ {} filter(s) reassigned.",
+        "filtres_reassoc_download": "⬇️ Download modified file",
+        "filtres_reassoc_suffix":   "_filter_sheets",
         "conn_no_databricks":   "No connection with a Databricks catalog detected in this file.",
         "conn_detected_title":  "Detected connections",
         "conn_lbl_catalog": "Catalog:",

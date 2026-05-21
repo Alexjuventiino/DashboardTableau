@@ -52,6 +52,7 @@ def recuperer_filtres(xml_content: bytes) -> list:
             show_apply = zone.get("show-apply", "") == "true"
             champ      = extraire_nom_champ(param) if param else "(inconnu)"
             mode_label = MODES.get(mode_xml, mode_xml)
+            feuille    = zone.get("name", "")
 
             filtres.append({
                 "zone_id":     zone_id,
@@ -61,6 +62,7 @@ def recuperer_filtres(xml_content: bytes) -> list:
                 "mode_actuel": mode_label,
                 "mode_xml":    mode_xml,
                 "show_apply":  show_apply,
+                "feuille":     feuille,
             })
 
     return filtres
@@ -460,4 +462,65 @@ def ajouter_filtres_dashboards(xml_content, spec_list: list) -> tuple:
         )
 
     return serialiser_xml(tree), nb_total
+
+
+# ─────────────────────────────────────────────────────────────
+# RÉASSOCIER LA FEUILLE SOURCE DES FILTRES
+# ─────────────────────────────────────────────────────────────
+
+def recuperer_toutes_feuilles(xml_content) -> list:
+    """Retourne la liste triée de toutes les feuilles (worksheets) du classeur."""
+    tree = parser_xml(xml_content)
+    root = tree.getroot()
+    feuilles = []
+    seen: set = set()
+    for ws in root.iter('worksheet'):
+        name = ws.get('name', '')
+        if name and name not in seen:
+            seen.add(name)
+            feuilles.append(name)
+    return sorted(feuilles)
+
+
+def init_df_reassociation(filtres: list) -> pd.DataFrame:
+    return pd.DataFrame([
+        {
+            "Modifier":         False,
+            "Dashboard":        f["dashboard"],
+            "Champ":            f["champ"],
+            "Feuille actuelle": f.get("feuille", ""),
+            "Nouvelle feuille": f.get("feuille", ""),
+        }
+        for f in filtres
+    ])
+
+
+def reassocier_feuille_filtres(xml_content: bytes, df_edited: pd.DataFrame,
+                                filtres_source: list) -> bytes:
+    """
+    Modifie l'attribut ``name`` (feuille source) des zones filter sélectionnées.
+
+    Seuls les filtres cochés dont la « Nouvelle feuille » diffère de la feuille
+    actuelle sont modifiés.
+    """
+    tree = parser_xml(xml_content)
+    root = tree.getroot()
+
+    # zone_id → nouvelle feuille
+    modifs: dict = {}
+    for i, row in df_edited[df_edited["Modifier"]].iterrows():
+        source   = filtres_source[i]
+        nouvelle = str(row["Nouvelle feuille"]).strip()
+        if nouvelle and nouvelle != source.get("feuille", ""):
+            modifs[source["zone_id"]] = nouvelle
+
+    if not modifs:
+        return serialiser_xml(tree)
+
+    for zone in root.findall(".//zone[@type-v2='filter']"):
+        zone_id = zone.get("id")
+        if zone_id in modifs:
+            zone.set("name", modifs[zone_id])
+
+    return serialiser_xml(tree)
 
