@@ -561,26 +561,39 @@ def main():
                             st.session_state["df_reassociation"] = df_r
                             st.rerun()
 
-                # Tableau
-                st.subheader(T["filtres_reassoc_table_title"])
+                # Tableaux par dashboard
                 st.caption(T["filtres_reassoc_table_caption"])
-                edited_reassoc = st.data_editor(
-                    st.session_state["df_reassociation"],
-                    column_config={
-                        "Modifier":         st.column_config.CheckboxColumn(T["filtres_reassoc_col_check"], width="small"),
-                        "Dashboard":        st.column_config.TextColumn(T["filtres_reassoc_col_dashboard"], disabled=True, width="medium"),
-                        "Champ":            st.column_config.TextColumn(T["filtres_reassoc_col_field"], disabled=True, width="medium"),
-                        "Feuille actuelle": st.column_config.TextColumn(T["filtres_reassoc_col_cur_sheet"], disabled=True, width="medium"),
-                        "Nouvelle feuille": st.column_config.SelectboxColumn(
-                            T["filtres_reassoc_col_new_sheet"],
-                            options=toutes_feuilles,
-                            width="medium",
-                        ),
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="editor_reassoc",
-                )
+                df_full_r = st.session_state["df_reassociation"]
+                dashboards_r = df_full_r["Dashboard"].unique().tolist()
+
+                edited_parts: dict = {}
+                for dash_name_r in dashboards_r:
+                    mask_r = df_full_r["Dashboard"] == dash_name_r
+                    sub_df_r = df_full_r[mask_r]
+                    with st.expander(dash_name_r):
+                        edited_sub_r = st.data_editor(
+                            sub_df_r,
+                            column_config={
+                                "Modifier":         st.column_config.CheckboxColumn(T["filtres_reassoc_col_check"], width="small"),
+                                "Dashboard":        None,
+                                "Champ":            st.column_config.TextColumn(T["filtres_reassoc_col_field"], disabled=True, width="medium"),
+                                "Feuille actuelle": st.column_config.TextColumn(T["filtres_reassoc_col_cur_sheet"], disabled=True, width="medium"),
+                                "Nouvelle feuille": st.column_config.SelectboxColumn(
+                                    T["filtres_reassoc_col_new_sheet"],
+                                    options=toutes_feuilles,
+                                    width="medium",
+                                ),
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key=f"editor_reassoc_{dash_name_r}",
+                        )
+                        edited_parts[dash_name_r] = edited_sub_r
+
+                # Recombine les sous-tableaux dans le df complet
+                edited_reassoc = df_full_r.copy()
+                for _sub in edited_parts.values():
+                    edited_reassoc.update(_sub)
 
                 nb_coches_reassoc = int(edited_reassoc["Modifier"].sum())
                 s = "s" if nb_coches_reassoc > 1 else ""
