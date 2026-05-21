@@ -22,6 +22,8 @@ def _categoriser(event_name: str) -> str:
         return "Rendering"
     if "domparser_parsexmlstring" in n:
         return "Parsing XML"
+    if "filters.compute-membership-state" in n:
+        return "Computing Filters"
     return "Other"
 
 
@@ -32,6 +34,7 @@ CATEGORIES_SIGNIFICATIVES = {
     "Computing Totals",
     "Rendering",
     "Parsing XML",
+    "Computing Filters",
 }
 
 
@@ -302,7 +305,7 @@ def construire_prompt_llm(df: pd.DataFrame, kpis: dict, lang: str) -> str:
         )
 
 
-def analyser_avec_gemini(prompt: str, api_key: str, model: str = "gemini-2.0-flash") -> str:
+def analyser_avec_gemini(prompt: str, api_key: str, model: str = "gemini-2.5-flash") -> str:
     """Envoie le prompt à l'API Gemini et retourne la réponse textuelle."""
     import google.generativeai as genai  # import local : évite l'erreur si non installé
     genai.configure(api_key=api_key)
