@@ -535,9 +535,9 @@ def main():
             if not filtres_source:
                 st.info(T["filtres_no_filter"])
             else:
-                # Appliquer à tous
+                # Appliquer à tous / sélection
                 st.subheader(T["filtres_reassoc_apply_all_title"])
-                col_ra, col_rb = st.columns([2, 1])
+                col_ra, col_rb, col_rc = st.columns([2, 1, 1])
                 with col_ra:
                     feuille_globale = st.selectbox(
                         T["filtres_reassoc_common_sheet"],
@@ -547,6 +547,19 @@ def main():
                         key="reassoc_global_sheet",
                     )
                 with col_rb:
+                    st.write("")
+                    st.write("")
+                    if st.button(T["filtres_reassoc_select_all"], use_container_width=True, key="reassoc_select_all"):
+                        df_r = st.session_state["df_reassociation"].copy()
+                        df_r["Modifier"] = True
+                        st.session_state["df_reassociation"] = df_r
+                        st.rerun()
+                    if st.button(T["filtres_reassoc_deselect_all"], use_container_width=True, key="reassoc_deselect_all"):
+                        df_r = st.session_state["df_reassociation"].copy()
+                        df_r["Modifier"] = False
+                        st.session_state["df_reassociation"] = df_r
+                        st.rerun()
+                with col_rc:
                     st.write("")
                     st.write("")
                     if st.button(T["filtres_reassoc_btn_apply_all"], use_container_width=True, key="reassoc_apply_all"):
@@ -606,6 +619,14 @@ def main():
                 ):
                     try:
                         fichier_reassoc = reassocier_feuille_filtres(xml_content, edited_reassoc, filtres_source)
+                        # Mettre à jour feuille actuelle dans session_state
+                        updated_source = [dict(f) for f in filtres_source]
+                        for i, row in edited_reassoc[edited_reassoc["Modifier"]].iterrows():
+                            nouvelle = str(row["Nouvelle feuille"]).strip()
+                            if nouvelle:
+                                updated_source[i]["feuille"] = nouvelle
+                        st.session_state["filtres_source"]    = updated_source
+                        st.session_state["df_reassociation"] = init_df_reassociation(updated_source)
                         st.success(T["filtres_reassoc_success"].format(nb_coches_reassoc))
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                         st.download_button(
