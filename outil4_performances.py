@@ -44,8 +44,45 @@ def extraire_perf_gantt(twbx_bytes: bytes) -> pd.DataFrame:
         if not candidats:
             raise ValueError("Aucun fichier perf_gantt.tab trouvé dans l'archive .twbx.")
         with z.open(candidats[0]) as f:
-            df = pd.read_csv(f, sep="|", low_memory=False, on_bad_lines="skip")
+            df = _lire_perf_tab(f.read())
     return _preparer(df)
+
+
+def _lire_perf_tab(raw: bytes) -> pd.DataFrame:
+    """Lecteur robuste pour perf_gantt.tab.
+
+    Le fichier utilise '|' comme séparateur. La dernière colonne (XML Text) peut
+    contenir du XML multiligne entre guillemets avec des '|' internes, ce qui
+    perturbe pd.read_csv. On lit ligne par ligne en ne conservant que les lignes
+    dont le premier champ est un entier (Start Index), ce qui élimine les
+    continuations XML et les lignes malformées sans perdre les événements utiles.
+    """
+    content = raw.decode("utf-8", errors="replace")
+    header: list[str] | None = None
+    rows: list[list[str]] = []
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split("|")
+        if header is None:
+            header = parts
+            continue
+        # Ligne de données valide : le premier champ est le Start Index (entier ≥ 0)
+        if parts[0].strip().isdigit():
+            rows.append(parts)
+
+    if not header or not rows:
+        return pd.DataFrame()
+
+    n = len(header)
+    # Normalise : tronque les lignes trop longues, complète les trop courtes
+    normalized = [
+        row[:n] if len(row) >= n else row + [""] * (n - len(row))
+        for row in rows
+    ]
+    return pd.DataFrame(normalized, columns=header)
 
 
 def _preparer(df: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +155,7 @@ def detecter_vagues(df: pd.DataFrame, seuil_gap_s: float = 0.2) -> pd.DataFrame:
         tps_req      = round(float(grp.loc[grp["Catégorie"] == "Executing Query", "Elapsed Time"].sum()), 3)
         cat_dom      = grp.groupby("Catégorie")["Elapsed Time"].sum().idxmax() if nb_ev > 0 else "—"
         rows.append({
-            "Vague":              f"Vague {v + 1}",
+            "Vague":              f"Vague {v + 1}",  # type: ignore[operator]
             "Début (s)":          debut_offset,
             "Durée (s)":          duree,
             "Évènements":         nb_ev,
