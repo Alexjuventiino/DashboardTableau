@@ -73,16 +73,8 @@ def calculer_kpis(df: pd.DataFrame) -> dict:
     """df doit être le dataframe filtré par filtrer_significatifs()."""
     mask_query = df["Catégorie"] == "Executing Query"
     mask_miss  = mask_query & df["CacheHit"].isin(["false", "0", ""])
-
-    # Durée réelle wall-clock depuis Start Time
-    duree = 0.0
-    if "Start Time" in df.columns and not df.empty:
-        start = pd.to_numeric(df["Start Time"], errors="coerce")
-        end   = start + df["Elapsed Time"]
-        duree = round(float(end.max() - start.min()), 3)
-
     return {
-        "duree_reelle":   duree,
+        "temps_total":    round(float(df["Elapsed Time"].sum()), 3) if not df.empty else 0.0,
         "max_event":      round(float(df["Elapsed Time"].max()), 3) if not df.empty else 0.0,
         "nb_requetes":    int(mask_query.sum()),
         "nb_cache_miss":  int(mask_miss.sum()),

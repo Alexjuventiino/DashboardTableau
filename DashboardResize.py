@@ -86,7 +86,7 @@ def main():
                 else:
                     kpis_data = calculer_kpis(df_perf)
                     col1, col2, col3, col4, col5 = st.columns(5)
-                    col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['duree_reelle']:.2f} s")
+                    col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['temps_total']:.2f} s")
                     col2.metric(T["perf_kpi_events"],      f"{kpis_data['max_event']:.2f} s")
                     col3.metric(T["perf_kpi_queries"],     f"{kpis_data['nb_requetes']:,}")
                     col4.metric(T["perf_kpi_cache_miss"],  f"{kpis_data['nb_cache_miss']:,}")
