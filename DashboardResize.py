@@ -17,6 +17,7 @@ from outil4_performances import (
     extraire_perf_gantt, filtrer_significatifs, calculer_kpis,
     top_evenements_lents, resume_par_feuille, resume_par_categorie,
     requetes_sans_cache, detecter_vagues,
+    construire_prompt_llm, analyser_avec_gemini,
 )
 from translations import TRANSLATIONS
 
@@ -69,6 +70,7 @@ def main():
         if perf_file is not None:
             if st.session_state.get("perf_fichier_actuel") != perf_file.name:
                 st.session_state.pop("perf_df", None)
+                st.session_state.pop("perf_llm_result", None)
                 st.session_state["perf_fichier_actuel"] = perf_file.name
 
             if "perf_df" not in st.session_state:
@@ -141,6 +143,28 @@ def main():
                             st.success(T["perf_cache_miss_none"])
                         else:
                             st.dataframe(df_miss, use_container_width=True, hide_index=True)
+
+                    # ── Analyse IA (Gemini) ───────────────────────────────
+                    st.divider()
+                    st.subheader(T["perf_llm_title"])
+                    st.caption(T["perf_llm_caption"])
+                    _gemini_key = st.secrets.get("GEMINI_API_KEY", None)
+                    if not _gemini_key:
+                        st.warning(T["perf_llm_no_key"])
+                    else:
+                        if st.button(T["perf_llm_btn"], key="gemini_analyse_btn"):
+                            with st.spinner(T["perf_llm_spinner"]):
+                                try:
+                                    _prompt = construire_prompt_llm(df_perf, kpis_data, lang)
+                                    st.session_state["perf_llm_result"] = analyser_avec_gemini(
+                                        _prompt, _gemini_key
+                                    )
+                                except Exception as _e:
+                                    st.session_state["perf_llm_result"] = (
+                                        f"⚠️ {T['perf_llm_error']} : {_e}"
+                                    )
+                        if "perf_llm_result" in st.session_state:
+                            st.markdown(st.session_state["perf_llm_result"])
 
 
     # Outils 1–3 : nécessitent un fichier classeur valide

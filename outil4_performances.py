@@ -247,3 +247,65 @@ def requetes_sans_cache(df: pd.DataFrame) -> pd.DataFrame:
     if "Elapsed Time" in result.columns:
         result["Elapsed Time"] = result["Elapsed Time"].round(3)
     return result
+
+
+# ─── Analyse LLM ─────────────────────────────────────────────────────────────
+
+def construire_prompt_llm(df: pd.DataFrame, kpis: dict, lang: str) -> str:
+    """Construit le prompt à envoyer à Gemini à partir des données de performance."""
+    top        = top_evenements_lents(df, n=10)
+    par_cat    = resume_par_categorie(df)
+    par_feuille = resume_par_feuille(df)
+    vagues     = detecter_vagues(df)
+
+    top_str     = top.to_string(index=False)
+    cat_str     = par_cat.to_string(index=False)
+    feuille_str = par_feuille.to_string(index=False) if not par_feuille.empty else "—"
+    nb_vagues   = len(vagues)
+    vagues_str  = vagues.to_string(index=False) if nb_vagues > 1 else "—"
+
+    if lang == "en":
+        return (
+            "You are a Tableau expert specializing in BI dashboard performance optimization.\n"
+            "Analyze the following Tableau Performance Recording data and provide a structured\n"
+            "analysis in exactly 3 sections:\n"
+            "1. **Summary** — Overall assessment of the load time and what dominates it.\n"
+            "2. **Bottlenecks** — Main performance issues identified, with supporting numbers.\n"
+            "3. **Recommendations** — Concrete, actionable steps to improve performance.\n\n"
+            "Be concise and factual. Reference specific numbers from the data below.\n\n"
+            f"=== KPIs ===\n"
+            f"Total work time    : {kpis['temps_total']} s\n"
+            f"Slowest event      : {kpis['max_event']} s\n"
+            f"SQL queries        : {kpis['nb_requetes']} (total query time: {kpis['temps_requetes']} s)\n\n"
+            f"=== Top 10 slowest events ===\n{top_str}\n\n"
+            f"=== By category ===\n{cat_str}\n\n"
+            f"=== By sheet ===\n{feuille_str}\n\n"
+            f"=== Execution waves ({nb_vagues} wave(s)) ===\n{vagues_str}\n"
+        )
+    else:
+        return (
+            "Tu es un expert Tableau spécialisé dans l'optimisation des performances de dashboards BI.\n"
+            "Analyse les données de performance suivantes issues d'un enregistrement Tableau Performance Recording.\n"
+            "Fournis une analyse structurée en exactement 3 parties :\n"
+            "1. **Résumé** — Évaluation globale du temps de chargement et de ce qui le domine.\n"
+            "2. **Goulots d'étranglement** — Principaux problèmes identifiés, avec les chiffres à l'appui.\n"
+            "3. **Recommandations** — Actions concrètes et actionnables pour améliorer les performances.\n\n"
+            "Sois concis et factuel. Appuie-toi sur les chiffres fournis.\n\n"
+            f"=== KPIs ===\n"
+            f"Temps de travail total : {kpis['temps_total']} s\n"
+            f"Événement le plus lent : {kpis['max_event']} s\n"
+            f"Requêtes SQL           : {kpis['nb_requetes']} (total requêtes : {kpis['temps_requetes']} s)\n\n"
+            f"=== Top 10 événements les plus lents ===\n{top_str}\n\n"
+            f"=== Par catégorie ===\n{cat_str}\n\n"
+            f"=== Par feuille ===\n{feuille_str}\n\n"
+            f"=== Vagues d'exécution ({nb_vagues} vague(s)) ===\n{vagues_str}\n"
+        )
+
+
+def analyser_avec_gemini(prompt: str, api_key: str) -> str:
+    """Envoie le prompt à l'API Gemini Flash et retourne la réponse textuelle."""
+    import google.generativeai as genai  # import local : évite l'erreur si non installé
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
+    return response.text

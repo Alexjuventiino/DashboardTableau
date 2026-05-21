@@ -153,6 +153,12 @@ TRANSLATIONS = {
         "perf_no_sheets":          "Aucune feuille identifiée dans les données.",
         "perf_waves_title":        "Vagues d'exécution",
         "perf_waves_caption":      "Détection des pauses > 0,2 s entre groupes d'événements. Chaque vague est un cycle de travail distinct de Tableau.",
+        "perf_llm_title":          "🤖 Analyse IA (Gemini)",
+        "perf_llm_caption":        "Génère une interprétation textuelle des résultats de performance via Google Gemini.",
+        "perf_llm_btn":            "✨ Analyser avec Gemini",
+        "perf_llm_spinner":        "Gemini analyse les données...",
+        "perf_llm_no_key":         "⚠️ Clé API Gemini non configurée. Ajoutez `GEMINI_API_KEY` dans les Secrets Streamlit Cloud.",
+        "perf_llm_error":          "Erreur lors de l'appel à l'API Gemini",
     },
     "en": {
         # ── General ────────────────────────────────────────────────
@@ -307,5 +313,11 @@ TRANSLATIONS = {
         "perf_no_sheets":          "No sheet identified in the data.",
         "perf_waves_title":        "Execution waves",
         "perf_waves_caption":      "Pauses > 0.2 s detected between event groups. Each wave is a distinct Tableau work cycle.",
+        "perf_llm_title":          "🤖 AI Analysis (Gemini)",
+        "perf_llm_caption":        "Generates a textual interpretation of the performance results using Google Gemini.",
+        "perf_llm_btn":            "✨ Analyze with Gemini",
+        "perf_llm_spinner":        "Gemini is analyzing the data...",
+        "perf_llm_no_key":         "⚠️ Gemini API key not configured. Add `GEMINI_API_KEY` to your Streamlit Cloud Secrets.",
+        "perf_llm_error":          "Error calling the Gemini API",
     },
 }
