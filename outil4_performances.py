@@ -53,7 +53,7 @@ def _preparer(df: pd.DataFrame) -> pd.DataFrame:
     df["Elapsed Time"] = pd.to_numeric(
         df["Elapsed Time"] if "Elapsed Time" in df.columns else 0.0,
         errors="coerce",
-    ).fillna(0.0)
+    ).fillna(0.0)  # type: ignore[union-attr]
     for col in ("Worksheet", "Dashboard", "DataSource Name", "Event Name", "CacheHit"):
         if col in df.columns:
             df[col] = df[col].fillna("").astype(str).str.strip()
@@ -73,13 +73,68 @@ def calculer_kpis(df: pd.DataFrame) -> dict:
     """df doit être le dataframe filtré par filtrer_significatifs()."""
     mask_query = df["Catégorie"] == "Executing Query"
     mask_miss  = mask_query & df["CacheHit"].isin(["false", "0", ""])
+
+    # Durée réelle wall-clock depuis Start Time
+    duree = 0.0
+    if "Start Time" in df.columns and not df.empty:
+        start = pd.to_numeric(df["Start Time"], errors="coerce")
+        end   = start + df["Elapsed Time"]
+        duree = round(float(end.max() - start.min()), 3)
+
     return {
-        "temps_total":    round(float(df["Elapsed Time"].sum()), 3) if not df.empty else 0.0,
+        "duree_reelle":   duree,
         "max_event":      round(float(df["Elapsed Time"].max()), 3) if not df.empty else 0.0,
         "nb_requetes":    int(mask_query.sum()),
         "nb_cache_miss":  int(mask_miss.sum()),
         "temps_requetes": round(float(df.loc[mask_query, "Elapsed Time"].sum()), 3),
     }
+
+
+def detecter_vagues(df: pd.DataFrame, seuil_gap_s: float = 0.2) -> pd.DataFrame:
+    """Détecte les vagues d'exécution successives en identifiant les pauses > seuil_gap_s.
+
+    Une vague = un groupe d'événements consécutifs sans pause significative entre eux.
+    Chaque pause > seuil_gap_s entre la fin d'un événement et le début du suivant
+    marque la frontière entre deux vagues.
+    """
+    if "Start Time" not in df.columns or df.empty:
+        return pd.DataFrame()
+
+    df2 = df.copy()
+    df2["_start"] = pd.to_numeric(df2["Start Time"], errors="coerce")
+    df2 = df2.dropna(subset=["_start"]).sort_values("_start").reset_index(drop=True)
+    df2["_end"] = df2["_start"] + df2["Elapsed Time"]
+
+    t0 = df2["_start"].min()
+
+    # Numérotation des vagues par détection des pauses
+    vague_ids = [0]
+    vague = 0
+    for i in range(1, len(df2)):
+        gap = df2["_start"].iloc[i] - df2["_end"].iloc[i - 1]
+        if gap > seuil_gap_s:
+            vague += 1
+        vague_ids.append(vague)
+    df2["_vague"] = vague_ids
+
+    rows = []
+    for v, grp in df2.groupby("_vague"):
+        debut_offset = round(float(grp["_start"].min() - t0), 2)
+        duree        = round(float(grp["_end"].max() - grp["_start"].min()), 2)
+        nb_ev        = len(grp)
+        nb_req       = int((grp["Catégorie"] == "Executing Query").sum())
+        tps_req      = round(float(grp.loc[grp["Catégorie"] == "Executing Query", "Elapsed Time"].sum()), 3)
+        cat_dom      = grp.groupby("Catégorie")["Elapsed Time"].sum().idxmax() if nb_ev > 0 else "—"
+        rows.append({
+            "Vague":              f"Vague {v + 1}",
+            "Début (s)":          debut_offset,
+            "Durée (s)":          duree,
+            "Évènements":         nb_ev,
+            "Requêtes SQL":       nb_req,
+            "Temps requêtes (s)": tps_req,
+            "Catégorie dominante": cat_dom,
+        })
+    return pd.DataFrame(rows)
 
 
 def top_evenements_lents(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:

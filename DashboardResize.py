@@ -16,7 +16,7 @@ from outil3_connexion import (
 from outil4_performances import (
     extraire_perf_gantt, filtrer_significatifs, calculer_kpis,
     top_evenements_lents, resume_par_feuille, resume_par_categorie,
-    requetes_sans_cache,
+    requetes_sans_cache, detecter_vagues,
 )
 from translations import TRANSLATIONS
 
@@ -86,7 +86,7 @@ def main():
                 else:
                     kpis_data = calculer_kpis(df_perf)
                     col1, col2, col3, col4, col5 = st.columns(5)
-                    col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['temps_total']:.2f} s")
+                    col1.metric(T["perf_kpi_total_time"],  f"{kpis_data['duree_reelle']:.2f} s")
                     col2.metric(T["perf_kpi_events"],      f"{kpis_data['max_event']:.2f} s")
                     col3.metric(T["perf_kpi_queries"],     f"{kpis_data['nb_requetes']:,}")
                     col4.metric(T["perf_kpi_cache_miss"],  f"{kpis_data['nb_cache_miss']:,}")
@@ -101,6 +101,13 @@ def main():
                         use_container_width=True,
                         hide_index=True,
                     )
+
+                    df_vagues = detecter_vagues(df_perf)
+                    if not df_vagues.empty and len(df_vagues) > 1:
+                        st.divider()
+                        st.subheader(T["perf_waves_title"])
+                        st.caption(T["perf_waves_caption"])
+                        st.dataframe(df_vagues, use_container_width=True, hide_index=True)
 
                     st.divider()
 

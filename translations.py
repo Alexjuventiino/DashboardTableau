@@ -136,7 +136,7 @@ TRANSLATIONS = {
         "perf_upload_label":     "Fichier .twbx d'enregistrement de performances",
         "perf_parse_error":      "❌ Impossible de lire le fichier : {}",
         "perf_no_data":          "Aucune donnée de performance trouvée dans ce fichier.",
-        "perf_kpi_total_time":   "Temps total",
+        "perf_kpi_total_time":   "Durée réelle",
         "perf_kpi_events":       "Événement le + lent",
         "perf_kpi_queries":      "Requêtes SQL",
         "perf_kpi_cache_miss":   "Cache miss",
@@ -150,6 +150,8 @@ TRANSLATIONS = {
         "perf_cache_miss_caption": "Requêtes exécutées sans résultat en cache (les plus lentes en premier).",
         "perf_cache_miss_none":    "✅ Toutes les requêtes SQL ont bénéficié du cache.",
         "perf_no_sheets":          "Aucune feuille identifiée dans les données.",
+        "perf_waves_title":        "Vagues d'exécution",
+        "perf_waves_caption":      "Détection des pauses > 0,2 s entre groupes d'événements. Chaque vague est un cycle de travail distinct de Tableau.",
     },
     "en": {
         # ── General ────────────────────────────────────────────────
@@ -287,7 +289,7 @@ TRANSLATIONS = {
         "perf_upload_label":     "Performance recording .twbx file",
         "perf_parse_error":      "❌ Unable to read the file: {}",
         "perf_no_data":          "No performance data found in this file.",
-        "perf_kpi_total_time":   "Total time",
+        "perf_kpi_total_time":   "Actual duration",
         "perf_kpi_events":       "Slowest event",
         "perf_kpi_queries":      "SQL queries",
         "perf_kpi_cache_miss":   "Cache miss",
@@ -301,5 +303,7 @@ TRANSLATIONS = {
         "perf_cache_miss_caption": "Queries executed without a cached result (slowest first).",
         "perf_cache_miss_none":    "✅ All SQL queries benefited from the cache.",
         "perf_no_sheets":          "No sheet identified in the data.",
+        "perf_waves_title":        "Execution waves",
+        "perf_waves_caption":      "Pauses > 0.2 s detected between event groups. Each wave is a distinct Tableau work cycle.",
     },
 }
