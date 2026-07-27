@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit_antd_components as sac
 import pandas as pd
 
-from utils import charger_contenu_xml, parser_xml
+from utils import charger_contenu_xml, parser_xml, serialiser_xml, remballer_twbx
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
 from outil2_filtres import (
     MODES_LABELS, MODES_REVERSE, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
@@ -181,7 +181,7 @@ def main():
         return
 
     try:
-        xml_content = charger_contenu_xml(xml_file)
+        xml_content, format_entree, ressources = charger_contenu_xml(xml_file)
         parser_xml(xml_content)  # validation
     except ValueError as e:
         st.error(T["upload_error"].format(e))
@@ -194,6 +194,8 @@ def main():
                     "df_reassociation", "toutes_feuilles"]:
             st.session_state.pop(key, None)
         st.session_state["fichier_actuel"] = xml_file.name
+        st.session_state["format_entree"] = format_entree
+        st.session_state["ressources_twbx"] = ressources
 
 
     # ════════════════════════════════════════════════════
@@ -299,11 +301,22 @@ def main():
                             fichier = modifier_tableaux_de_bord(xml_content, modifications, deplacer_droite, deplacer_bas)
                             st.success(T["resize_success"].format(nb_coches_resize))
                             nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                            
+                            # Déterminer le format de sortie et préparer le fichier
+                            if st.session_state.get("format_entree") == "twbx" and st.session_state.get("ressources_twbx"):
+                                fichier_telecharge = remballer_twbx(fichier, st.session_state["ressources_twbx"])
+                                ext = ".twbx"
+                                mime = "application/zip"
+                            else:
+                                fichier_telecharge = fichier
+                                ext = ".twb"
+                                mime = "application/xml"
+                            
                             st.download_button(
                                 label=T["resize_download"],
-                                data=fichier,
-                                file_name=f"{nom_base}{T['resize_suffix']}.twb",
-                                mime="application/xml",
+                                data=fichier_telecharge,
+                                file_name=f"{nom_base}{T['resize_suffix']}{ext}",
+                                mime=mime,
                                 key="dl_resize",
                             )
                         except ValueError as e:
@@ -400,11 +413,22 @@ def main():
                         fichier = appliquer_modifications_filtres(xml_content, edited_filtres, filtres_source)
                         st.success(T["filtres_success"].format(nb_coches_filtres))
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        
+                        # Déterminer le format de sortie et préparer le fichier
+                        if st.session_state.get("format_entree") == "twbx" and st.session_state.get("ressources_twbx"):
+                            fichier_telecharge = remballer_twbx(fichier, st.session_state["ressources_twbx"])
+                            ext = ".twbx"
+                            mime = "application/zip"
+                        else:
+                            fichier_telecharge = fichier
+                            ext = ".twb"
+                            mime = "application/xml"
+                        
                         st.download_button(
                             label=T["filtres_download"],
-                            data=fichier,
-                            file_name=f"{nom_base}{T['filtres_suffix']}.twb",
-                            mime="application/xml",
+                            data=fichier_telecharge,
+                            file_name=f"{nom_base}{T['filtres_suffix']}{ext}",
+                            mime=mime,
                             key="dl_filtres",
                         )
                     except ValueError as e:
@@ -515,12 +539,26 @@ def main():
                         fichier_add, nb_add = ajouter_filtres_dashboards(xml_content, add_specs)
                         st.success(T["filtres_add_success"].format(nb_add))
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
-                        nom_ext  = ".tds" if _is_tds else ".twb"
+                        
+                        # Déterminer le format de sortie et préparer le fichier
+                        if _is_tds:
+                            nom_ext = ".tds"
+                            mime = "application/xml"
+                            fichier_telecharge = fichier_add
+                        elif st.session_state.get("format_entree") == "twbx" and st.session_state.get("ressources_twbx"):
+                            nom_ext = ".twbx"
+                            mime = "application/zip"
+                            fichier_telecharge = remballer_twbx(fichier_add, st.session_state["ressources_twbx"])
+                        else:
+                            nom_ext = ".twb"
+                            mime = "application/xml"
+                            fichier_telecharge = fichier_add
+                        
                         st.download_button(
                             label=T["filtres_add_download"],
-                            data=fichier_add,
+                            data=fichier_telecharge,
                             file_name=f"{nom_base}{T['filtres_add_suffix']}{nom_ext}",
-                            mime="application/xml",
+                            mime=mime,
                             key="dl_add_filters",
                         )
                     except ValueError as e:
@@ -652,11 +690,22 @@ def main():
                         st.session_state["df_reassociation"] = init_df_reassociation(updated_source)
                         st.success(T["filtres_reassoc_success"].format(nb_coches_reassoc))
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
+                        
+                        # Déterminer le format de sortie et préparer le fichier
+                        if st.session_state.get("format_entree") == "twbx" and st.session_state.get("ressources_twbx"):
+                            fichier_telecharge = remballer_twbx(fichier_reassoc, st.session_state["ressources_twbx"])
+                            ext = ".twbx"
+                            mime = "application/zip"
+                        else:
+                            fichier_telecharge = fichier_reassoc
+                            ext = ".twb"
+                            mime = "application/xml"
+                        
                         st.download_button(
                             label=T["filtres_reassoc_download"],
-                            data=fichier_reassoc,
-                            file_name=f"{nom_base}{T['filtres_reassoc_suffix']}.twb",
-                            mime="application/xml",
+                            data=fichier_telecharge,
+                            file_name=f"{nom_base}{T['filtres_reassoc_suffix']}{ext}",
+                            mime=mime,
                             key="dl_reassoc",
                         )
                     except ValueError as e:
@@ -886,12 +935,26 @@ def main():
                         msgs.append(T["conn_ok_tables"].format(n=nb_tab, s=s))
                     st.success("✅ " + " · ".join(msgs) + ".")
                     nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
-                    nom_ext  = ".tds" if _is_tds else ".twb"
+                    
+                    # Déterminer le format de sortie et préparer le fichier
+                    if _is_tds:
+                        nom_ext = ".tds"
+                        mime = "application/xml"
+                        fichier_telecharge = xml_modifie
+                    elif st.session_state.get("format_entree") == "twbx" and st.session_state.get("ressources_twbx"):
+                        nom_ext = ".twbx"
+                        mime = "application/zip"
+                        fichier_telecharge = remballer_twbx(xml_modifie, st.session_state["ressources_twbx"])
+                    else:
+                        nom_ext = ".twb"
+                        mime = "application/xml"
+                        fichier_telecharge = xml_modifie
+                    
                     st.download_button(
                         label=T["conn_download"],
-                        data=xml_modifie,
+                        data=fichier_telecharge,
                         file_name=f"{nom_base}{T['conn_suffix']}{nom_ext}",
-                        mime="application/xml",
+                        mime=mime,
                         key="dl_connexion",
                     )
 
