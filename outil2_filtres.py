@@ -28,14 +28,35 @@ def extraire_nom_champ(param: str) -> str:
     return parts[-1] if parts else param
 
 
-def extraire_nom_affiche_filtre(zone) -> str:
+def extraire_caption_from_datasource(root, champ_physique: str) -> str:
     """
-    Extrait le nom affiché du filtre.
-    Cherche dans:
-    1. zone-style > style > style-rule[@element='quick-filter'] > format[@attr='title']
-    2. Attribut directement sur la zone (title, caption, etc.)
-    3. En dernier recours, extrait du param
+    Cherche le caption (nom affiché) du champ dans datasource-dependencies.
     """
+    if not champ_physique:
+        return ""
+    
+    # Chercher dans tous les éléments column du document
+    # Le champ est nommé avec des crochets dans le datasource
+    field_name_with_brackets = f"[{champ_physique}]"
+    
+    for column in root.findall(".//column"):
+        if column.get("name") == field_name_with_brackets:
+            caption = column.get("caption")
+            if caption:
+                return caption
+    
+    return ""
+
+
+def extraire_nom_affiche_filtre(zone, root=None) -> str:
+    """
+    Extrait le nom affiché du filtre à partir du style-rule[@element='quick-filter'].
+    Cherche le format[@attr='title'] dont le field correspond au param du filtre.
+    """
+    param = zone.get("param", "")
+    if not param:
+        return ""
+    
     # Chercher dans zone-style > style > style-rule > format
     zone_style = zone.find("zone-style")
     if zone_style is not None:
@@ -44,34 +65,39 @@ def extraire_nom_affiche_filtre(zone) -> str:
             # Chercher style-rule avec element='quick-filter'
             for style_rule in style.findall("style-rule"):
                 if style_rule.get("element") == "quick-filter":
-                    # Chercher format avec attr='title'
+                    # Chercher format avec attr='title' dont le field correspond au param
                     for format_elem in style_rule.findall("format"):
                         if format_elem.get("attr") == "title":
-                            # Chercher d'abord l'attribut value
-                            nom_affiche = format_elem.get("value")
-                            if nom_affiche:
-                                return nom_affiche
-                            
-                            # Sinon, chercher dans les balises <run>
-                            formatted_text = format_elem.find("formatted-text")
-                            if formatted_text is not None:
-                                run = formatted_text.find("run")
-                                if run is not None and run.text:
-                                    return run.text
+                            format_field = format_elem.get("field", "")
+                            # Comparer les champs
+                            if format_field == param:
+                                # Chercher d'abord l'attribut value
+                                nom_affiche = format_elem.get("value")
+                                if nom_affiche:
+                                    return nom_affiche.strip()
+                                
+                                # Sinon, chercher dans les balises <run>
+                                formatted_text = format_elem.find("formatted-text")
+                                if formatted_text is not None:
+                                    run = formatted_text.find("run")
+                                    if run is not None and run.text:
+                                        return run.text.strip()
     
     # Fallback: chercher un attribut title ou caption sur la zone
     nom_affiche = zone.get("title") or zone.get("caption")
     if nom_affiche:
-        return nom_affiche
+        return nom_affiche.strip()
+    
+    # Chercher dans datasource-dependencies si root est fourni
+    if root is not None:
+        champ = extraire_nom_champ(param)
+        caption = extraire_caption_from_datasource(root, champ)
+        if caption:
+            return caption
     
     # Dernier recours: tirer du param si possible
-    param = zone.get("param", "")
-    if param:
-        # Extraire le dernier segment du param
-        nom_from_param = extraire_nom_champ(param)
-        return nom_from_param
-    
-    return ""
+    champ = extraire_nom_champ(param)
+    return champ if champ else ""
 
 
 def recuperer_filtres(xml_content: bytes) -> list:
@@ -99,7 +125,7 @@ def recuperer_filtres(xml_content: bytes) -> list:
             champ        = extraire_nom_champ(param) if param else "(inconnu)"
             mode_label   = MODES.get(mode_xml, mode_xml)
             feuille      = zone.get("name", "")
-            nom_affiche  = extraire_nom_affiche_filtre(zone)
+            nom_affiche  = extraire_nom_affiche_filtre(zone, root)
 
             filtres.append({
                 "zone_id":     zone_id,
