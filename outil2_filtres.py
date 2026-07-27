@@ -28,6 +28,43 @@ def extraire_nom_champ(param: str) -> str:
     return parts[-1] if parts else param
 
 
+def extraire_nom_affiche_filtre(zone) -> str:
+    """
+    Extrait le nom affiché du filtre.
+    Cherche dans zone-style > style > style-rule > format avec attr='title'
+    et retourne l'attribut 'value' ou le contenu de <run>.
+    """
+    zone_style = zone.find("zone-style")
+    if zone_style is None:
+        return ""
+    
+    style = zone_style.find("style")
+    if style is None:
+        return ""
+    
+    style_rule = style.find("style-rule[@element='quick-filter']")
+    if style_rule is None:
+        return ""
+    
+    format_elem = style_rule.find("format[@attr='title']")
+    if format_elem is None:
+        return ""
+    
+    # Chercher d'abord l'attribut value
+    nom_affiche = format_elem.get("value")
+    if nom_affiche:
+        return nom_affiche
+    
+    # Sinon, chercher dans les balises <run>
+    formatted_text = format_elem.find("formatted-text")
+    if formatted_text is not None:
+        run = formatted_text.find("run")
+        if run is not None and run.text:
+            return run.text
+    
+    return ""
+
+
 def recuperer_filtres(xml_content: bytes) -> list:
     tree = parser_xml(xml_content)
     root = tree.getroot()
@@ -47,17 +84,19 @@ def recuperer_filtres(xml_content: bytes) -> list:
                 continue
             vus.add(cle)
 
-            param      = zone.get("param", "")
-            mode_xml   = zone.get("mode", "")
-            show_apply = zone.get("show-apply", "") == "true"
-            champ      = extraire_nom_champ(param) if param else "(inconnu)"
-            mode_label = MODES.get(mode_xml, mode_xml)
-            feuille    = zone.get("name", "")
+            param        = zone.get("param", "")
+            mode_xml     = zone.get("mode", "")
+            show_apply   = zone.get("show-apply", "") == "true"
+            champ        = extraire_nom_champ(param) if param else "(inconnu)"
+            mode_label   = MODES.get(mode_xml, mode_xml)
+            feuille      = zone.get("name", "")
+            nom_affiche  = extraire_nom_affiche_filtre(zone)
 
             filtres.append({
                 "zone_id":     zone_id,
                 "dashboard":   dashboard_name,
                 "champ":       champ,
+                "nom_affiche": nom_affiche,
                 "param":       param,
                 "mode_actuel": mode_label,
                 "mode_xml":    mode_xml,
@@ -488,6 +527,7 @@ def init_df_reassociation(filtres: list) -> pd.DataFrame:
             "Modifier":         False,
             "Dashboard":        f["dashboard"],
             "Champ":            f["champ"],
+            "Nom affiché":      f.get("nom_affiche", ""),
             "Feuille actuelle": f.get("feuille", ""),
             "Nouvelle feuille": f.get("feuille", ""),
         }

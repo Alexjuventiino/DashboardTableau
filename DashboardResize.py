@@ -612,6 +612,7 @@ def main():
                                 "Modifier":         st.column_config.CheckboxColumn(T["filtres_reassoc_col_check"], width="small"),
                                 "Dashboard":        None,
                                 "Champ":            st.column_config.TextColumn(T["filtres_reassoc_col_field"], disabled=True, width="medium"),
+                                "Nom affiché":      st.column_config.TextColumn(T.get("filtres_reassoc_col_display_name", "Nom affiché"), disabled=True, width="medium"),
                                 "Feuille actuelle": st.column_config.TextColumn(T["filtres_reassoc_col_cur_sheet"], disabled=True, width="medium"),
                                 "Nouvelle feuille": st.column_config.SelectboxColumn(
                                     T["filtres_reassoc_col_new_sheet"],
