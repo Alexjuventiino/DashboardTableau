@@ -51,37 +51,43 @@ def extraire_caption_from_datasource(root, champ_physique: str) -> str:
 def extraire_nom_affiche_filtre(zone, root=None) -> str:
     """
     Extrait le nom affiché du filtre à partir du style-rule[@element='quick-filter'].
-    Cherche le format[@attr='title'] dont le field correspond au param du filtre.
+    Cherche globalement dans le document (worksheets), puis fallback sur datasource caption.
     """
     param = zone.get("param", "")
     if not param:
         return ""
     
-    # Chercher dans zone-style > style > style-rule > format
+    # Chercher d'abord dans zone-style (cas rare pour filtres dashboard)
     zone_style = zone.find("zone-style")
     if zone_style is not None:
         style = zone_style.find("style")
         if style is not None:
-            # Chercher style-rule avec element='quick-filter'
             for style_rule in style.findall("style-rule"):
                 if style_rule.get("element") == "quick-filter":
-                    # Chercher format avec attr='title' dont le field correspond au param
                     for format_elem in style_rule.findall("format"):
-                        if format_elem.get("attr") == "title":
-                            format_field = format_elem.get("field", "")
-                            # Comparer les champs
-                            if format_field == param:
-                                # Chercher d'abord l'attribut value
-                                nom_affiche = format_elem.get("value")
-                                if nom_affiche:
-                                    return nom_affiche.strip()
-                                
-                                # Sinon, chercher dans les balises <run>
-                                formatted_text = format_elem.find("formatted-text")
-                                if formatted_text is not None:
-                                    run = formatted_text.find("run")
-                                    if run is not None and run.text:
-                                        return run.text.strip()
+                        if format_elem.get("attr") == "title" and format_elem.get("field") == param:
+                            nom_affiche = format_elem.get("value")
+                            if nom_affiche:
+                                return nom_affiche.strip()
+                            formatted_text = format_elem.find("formatted-text")
+                            if formatted_text is not None:
+                                run = formatted_text.find("run")
+                                if run is not None and run.text:
+                                    return run.text.strip()
+    
+    # Chercher globalement dans le document (worksheets, etc.)
+    if root is not None:
+        for style_rule in root.findall(".//style-rule[@element='quick-filter']"):
+            for format_elem in style_rule.findall("format"):
+                if format_elem.get("attr") == "title" and format_elem.get("field") == param:
+                    nom_affiche = format_elem.get("value")
+                    if nom_affiche:
+                        return nom_affiche.strip()
+                    formatted_text = format_elem.find("formatted-text")
+                    if formatted_text is not None:
+                        run = formatted_text.find("run")
+                        if run is not None and run.text:
+                            return run.text.strip()
     
     # Fallback: chercher un attribut title ou caption sur la zone
     nom_affiche = zone.get("title") or zone.get("caption")
