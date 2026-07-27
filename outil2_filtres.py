@@ -577,6 +577,92 @@ def init_df_reassociation(filtres: list) -> pd.DataFrame:
     ])
 
 
+def synchroniser_style_rules_filters(root, zone_id: str, feuille_source: str, 
+                                      feuille_cible: str, param: str):
+    """
+    Synchronise les style-rules (noms affichés) des filtres d'une feuille source 
+    vers une feuille cible.
+    
+    Cherche le format[@field=param] dans le worksheet source et le copie 
+    au worksheet cible pour éviter de perdre les noms affichés personnalisés.
+    """
+    # Trouver les worksheets source et cible
+    worksheet_source = None
+    worksheet_cible = None
+    
+    for ws in root.findall(".//worksheet"):
+        if ws.get("name") == feuille_source:
+            worksheet_source = ws
+        if ws.get("name") == feuille_cible:
+            worksheet_cible = ws
+    
+    if not worksheet_source or not worksheet_cible:
+        return  # Impossible de synchroniser
+    
+    # Chercher le style-rule[@element='quick-filter'] dans source
+    style_rule_source = None
+    for table in worksheet_source.findall(".//table"):
+        for style in table.findall(".//style"):
+            for rule in style.findall("style-rule"):
+                if rule.get("element") == "quick-filter":
+                    style_rule_source = rule
+                    break
+    
+    if not style_rule_source:
+        return  # Pas de style-rule à copier
+    
+    # Chercher le format[@field=param] dans style-rule source
+    format_source = None
+    for fmt in style_rule_source.findall("format"):
+        if fmt.get("attr") == "title" and fmt.get("field") == param:
+            format_source = fmt
+            break
+    
+    if not format_source:
+        return  # Pas de format à copier
+    
+    # Trouver ou créer style-rule[@element='quick-filter'] dans cible
+    style_rule_cible = None
+    for table in worksheet_cible.findall(".//table"):
+        for style in table.findall(".//style"):
+            for rule in style.findall("style-rule"):
+                if rule.get("element") == "quick-filter":
+                    style_rule_cible = rule
+                    break
+    
+    # Si pas trouvé, créer le style-rule dans le premier table/style du worksheet cible
+    if not style_rule_cible:
+        table_cible = worksheet_cible.find(".//table")
+        if table_cible is not None:
+            style_cible = table_cible.find("style")
+            if style_cible is None:
+                style_cible = ET.Element("style")
+                # Insérer après les éléments de table
+                insert_pos = len(list(table_cible))
+                table_cible.insert(insert_pos, style_cible)
+            
+            style_rule_cible = ET.SubElement(style_cible, "style-rule")
+            style_rule_cible.set("element", "quick-filter")
+    
+    if style_rule_cible is None:
+        return
+    
+    # Copier ou remplacer le format[@field=param]
+    format_existant = None
+    for fmt in style_rule_cible.findall("format"):
+        if fmt.get("attr") == "title" and fmt.get("field") == param:
+            format_existant = fmt
+            break
+    
+    if format_existant is not None:
+        # Remplacer
+        style_rule_cible.remove(format_existant)
+    
+    # Copier le format source
+    format_copy = ET.fromstring(ET.tostring(format_source))
+    style_rule_cible.append(format_copy)
+
+
 def reassocier_feuille_filtres(xml_content: bytes, df_edited: pd.DataFrame,
                                 filtres_source: list) -> bytes:
     """
@@ -584,25 +670,38 @@ def reassocier_feuille_filtres(xml_content: bytes, df_edited: pd.DataFrame,
 
     Seuls les filtres cochés dont la « Nouvelle feuille » diffère de la feuille
     actuelle sont modifiés.
+    
+    Synchronise aussi les style-rules (noms affichés) vers la nouvelle feuille.
     """
     tree = parser_xml(xml_content)
     root = tree.getroot()
 
-    # zone_id → nouvelle feuille
+    # zone_id → (nouvelle feuille, param, feuille source)
     modifs: dict = {}
     for i, row in df_edited[df_edited["Modifier"]].iterrows():
         source   = filtres_source[i]
         nouvelle = str(row["Nouvelle feuille"]).strip()
         if nouvelle and nouvelle != source.get("feuille", ""):
-            modifs[source["zone_id"]] = nouvelle
+            modifs[source["zone_id"]] = (
+                nouvelle,
+                source.get("param", ""),
+                source.get("feuille", "")
+            )
 
     if not modifs:
         return serialiser_xml(tree)
 
+    # D'abord, synchroniser les style-rules
+    for zone_id, (feuille_cible, param, feuille_source) in modifs.items():
+        synchroniser_style_rules_filters(root, zone_id, feuille_source, 
+                                         feuille_cible, param)
+
+    # Ensuite, changer le name des zones
     for zone in root.findall(".//zone[@type-v2='filter']"):
         zone_id = zone.get("id")
         if zone_id in modifs:
-            zone.set("name", modifs[zone_id])
+            feuille_cible, _, _ = modifs[zone_id]
+            zone.set("name", feuille_cible)
 
     return serialiser_xml(tree)
 
