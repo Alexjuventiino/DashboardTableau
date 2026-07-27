@@ -42,25 +42,23 @@ def extraire_nom_affiche_filtre(zone) -> str:
     if style is None:
         return ""
     
-    style_rule = style.find("style-rule[@element='quick-filter']")
-    if style_rule is None:
-        return ""
-    
-    format_elem = style_rule.find("format[@attr='title']")
-    if format_elem is None:
-        return ""
-    
-    # Chercher d'abord l'attribut value
-    nom_affiche = format_elem.get("value")
-    if nom_affiche:
-        return nom_affiche
-    
-    # Sinon, chercher dans les balises <run>
-    formatted_text = format_elem.find("formatted-text")
-    if formatted_text is not None:
-        run = formatted_text.find("run")
-        if run is not None and run.text:
-            return run.text
+    # Chercher style-rule avec element='quick-filter'
+    for style_rule in style.findall("style-rule"):
+        if style_rule.get("element") == "quick-filter":
+            # Chercher format avec attr='title'
+            for format_elem in style_rule.findall("format"):
+                if format_elem.get("attr") == "title":
+                    # Chercher d'abord l'attribut value
+                    nom_affiche = format_elem.get("value")
+                    if nom_affiche:
+                        return nom_affiche
+                    
+                    # Sinon, chercher dans les balises <run>
+                    formatted_text = format_elem.find("formatted-text")
+                    if formatted_text is not None:
+                        run = formatted_text.find("run")
+                        if run is not None and run.text:
+                            return run.text
     
     return ""
 
