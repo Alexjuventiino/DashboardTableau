@@ -77,17 +77,18 @@ def extraire_nom_affiche_filtre(zone, root=None) -> str:
     
     # Chercher globalement dans le document (worksheets, etc.)
     if root is not None:
-        for style_rule in root.findall(".//style-rule[@element='quick-filter']"):
-            for format_elem in style_rule.findall("format"):
-                if format_elem.get("attr") == "title" and format_elem.get("field") == param:
-                    nom_affiche = format_elem.get("value")
-                    if nom_affiche:
-                        return nom_affiche.strip()
-                    formatted_text = format_elem.find("formatted-text")
-                    if formatted_text is not None:
-                        run = formatted_text.find("run")
-                        if run is not None and run.text:
-                            return run.text.strip()
+        for style_rule in root.findall(".//style-rule"):
+            if style_rule.get("element") == "quick-filter":
+                for format_elem in style_rule.findall("format"):
+                    if format_elem.get("attr") == "title" and format_elem.get("field") == param:
+                        nom_affiche = format_elem.get("value")
+                        if nom_affiche:
+                            return nom_affiche.strip()
+                        formatted_text = format_elem.find("formatted-text")
+                        if formatted_text is not None:
+                            run = formatted_text.find("run")
+                            if run is not None and run.text:
+                                return run.text.strip()
     
     # Fallback: chercher un attribut title ou caption sur la zone
     nom_affiche = zone.get("title") or zone.get("caption")
