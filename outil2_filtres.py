@@ -31,34 +31,45 @@ def extraire_nom_champ(param: str) -> str:
 def extraire_nom_affiche_filtre(zone) -> str:
     """
     Extrait le nom affiché du filtre.
-    Cherche dans zone-style > style > style-rule > format avec attr='title'
-    et retourne l'attribut 'value' ou le contenu de <run>.
+    Cherche dans:
+    1. zone-style > style > style-rule[@element='quick-filter'] > format[@attr='title']
+    2. Attribut directement sur la zone (title, caption, etc.)
+    3. En dernier recours, extrait du param
     """
+    # Chercher dans zone-style > style > style-rule > format
     zone_style = zone.find("zone-style")
-    if zone_style is None:
-        return ""
+    if zone_style is not None:
+        style = zone_style.find("style")
+        if style is not None:
+            # Chercher style-rule avec element='quick-filter'
+            for style_rule in style.findall("style-rule"):
+                if style_rule.get("element") == "quick-filter":
+                    # Chercher format avec attr='title'
+                    for format_elem in style_rule.findall("format"):
+                        if format_elem.get("attr") == "title":
+                            # Chercher d'abord l'attribut value
+                            nom_affiche = format_elem.get("value")
+                            if nom_affiche:
+                                return nom_affiche
+                            
+                            # Sinon, chercher dans les balises <run>
+                            formatted_text = format_elem.find("formatted-text")
+                            if formatted_text is not None:
+                                run = formatted_text.find("run")
+                                if run is not None and run.text:
+                                    return run.text
     
-    style = zone_style.find("style")
-    if style is None:
-        return ""
+    # Fallback: chercher un attribut title ou caption sur la zone
+    nom_affiche = zone.get("title") or zone.get("caption")
+    if nom_affiche:
+        return nom_affiche
     
-    # Chercher style-rule avec element='quick-filter'
-    for style_rule in style.findall("style-rule"):
-        if style_rule.get("element") == "quick-filter":
-            # Chercher format avec attr='title'
-            for format_elem in style_rule.findall("format"):
-                if format_elem.get("attr") == "title":
-                    # Chercher d'abord l'attribut value
-                    nom_affiche = format_elem.get("value")
-                    if nom_affiche:
-                        return nom_affiche
-                    
-                    # Sinon, chercher dans les balises <run>
-                    formatted_text = format_elem.find("formatted-text")
-                    if formatted_text is not None:
-                        run = formatted_text.find("run")
-                        if run is not None and run.text:
-                            return run.text
+    # Dernier recours: tirer du param si possible
+    param = zone.get("param", "")
+    if param:
+        # Extraire le dernier segment du param
+        nom_from_param = extraire_nom_champ(param)
+        return nom_from_param
     
     return ""
 
