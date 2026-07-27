@@ -8,6 +8,7 @@ from outil2_filtres import (
     MODES_LABELS, MODES_REVERSE, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
     recuperer_feuilles_par_dashboard, recuperer_champs_feuille, ajouter_filtres_dashboards,
     recuperer_toutes_feuilles, init_df_reassociation, reassocier_feuille_filtres,
+    appliquer_feuille_commune_par_dashboard,
 )
 from outil3_connexion import (
     recuperer_catalogues, remplacer_catalogue,
@@ -570,12 +571,41 @@ def main():
                 for dash_name_r in dashboards_r:
                     mask_r = df_full_r["Dashboard"] == dash_name_r
                     sub_df_r = df_full_r[mask_r]
-                    with st.expander(dash_name_r):
-                        if st.button(T["filtres_reassoc_select_all"], key=f"reassoc_sel_all_{dash_name_r}"):
-                            df_r = st.session_state["df_reassociation"].copy()
-                            df_r.loc[mask_r, "Modifier"] = True
-                            st.session_state["df_reassociation"] = df_r
-                            st.rerun()
+                    with st.expander(f"📊 {dash_name_r}"):
+                        # Boutons d'action pour ce dashboard
+                        col_d1, col_d2, col_d3 = st.columns([2, 1, 1])
+                        with col_d1:
+                            feuille_dash = st.selectbox(
+                                T["filtres_reassoc_common_sheet"],
+                                options=toutes_feuilles,
+                                index=None,
+                                placeholder=T["filtres_reassoc_common_sheet_ph"],
+                                key=f"reassoc_dash_sheet_{dash_name_r}",
+                            )
+                        with col_d2:
+                            st.write("")
+                            if st.button(T["filtres_reassoc_select_all"], key=f"reassoc_sel_all_{dash_name_r}", use_container_width=True):
+                                df_r = st.session_state["df_reassociation"].copy()
+                                df_r.loc[mask_r, "Modifier"] = True
+                                st.session_state["df_reassociation"] = df_r
+                                st.rerun()
+                        with col_d3:
+                            st.write("")
+                            if st.button(
+                                T.get("filtres_reassoc_apply_dashboard", "✓ Appliquer"),
+                                key=f"reassoc_apply_dash_{dash_name_r}",
+                                use_container_width=True,
+                                type="secondary",
+                            ):
+                                if feuille_dash:
+                                    df_r = st.session_state["df_reassociation"].copy()
+                                    df_r = appliquer_feuille_commune_par_dashboard(df_r, dash_name_r, feuille_dash)
+                                    st.session_state["df_reassociation"] = df_r
+                                    st.rerun()
+                                else:
+                                    st.warning(T.get("filtres_reassoc_warn_no_sheet_dashboard", "Sélectionnez une feuille d'abord"))
+                        
+                        st.write("")
                         edited_sub_r = st.data_editor(
                             sub_df_r,
                             column_config={

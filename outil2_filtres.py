@@ -524,3 +524,32 @@ def reassocier_feuille_filtres(xml_content: bytes, df_edited: pd.DataFrame,
 
     return serialiser_xml(tree)
 
+
+def appliquer_feuille_commune_par_dashboard(df_reassociation: pd.DataFrame,
+                                           dashboard_name: str,
+                                           feuille_commune: str) -> pd.DataFrame:
+    """
+    Applique une feuille commune à tous les filtres d'un dashboard.
+    
+    Args:
+        df_reassociation: DataFrame de réassociation (colonne "Dashboard")
+        dashboard_name: Nom du dashboard cible
+        feuille_commune: Feuille à appliquer
+    
+    Returns:
+        DataFrame modifié avec tous les filtres du dashboard cochés et
+        la nouvelle feuille définie.
+    """
+    if not feuille_commune or not feuille_commune.strip():
+        return df_reassociation.copy()
+    
+    df = df_reassociation.copy()
+    mask = df["Dashboard"] == dashboard_name
+    
+    # Cocher tous les filtres du dashboard
+    df.loc[mask, "Modifier"] = True
+    # Appliquer la feuille commune
+    df.loc[mask, "Nouvelle feuille"] = feuille_commune
+    
+    return df
+
