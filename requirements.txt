@@ -2,3 +2,4 @@ streamlit
 pandas
 streamlit_antd_components
 google-generativeai
+lxml

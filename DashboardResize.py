@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit_antd_components as sac
 import pandas as pd
 
-from utils import charger_contenu_xml, parser_xml, serialiser_xml, remballer_twbx
+from utils import charger_contenu_xml, parser_xml, serialiser_xml, remballer_twbx, obtenir_infos_validation
 from outil1_resize import recuperer_dashboards_avec_tailles, modifier_tableaux_de_bord, init_df_resize
 from outil2_filtres import (
     MODES_LABELS, MODES_REVERSE, recuperer_filtres, init_df_filtres, appliquer_modifications_filtres,
@@ -300,6 +300,21 @@ def main():
                         try:
                             fichier = modifier_tableaux_de_bord(xml_content, modifications, deplacer_droite, deplacer_bas)
                             st.success(T["resize_success"].format(nb_coches_resize))
+                            
+                            # Valider le fichier
+                            infos_val = obtenir_infos_validation(fichier.read() if hasattr(fichier, 'read') else fichier)
+                            fichier.seek(0) if hasattr(fichier, 'seek') else None
+                            
+                            if not infos_val["valide"]:
+                                st.warning(f"⚠️ Validation: {infos_val['nb_erreurs']} erreur(s) détectée(s)")
+                                with st.expander("📋 Détails des erreurs"):
+                                    for err in infos_val["messages"][:5]:  # Afficher max 5
+                                        st.code(err, language="text")
+                                    if len(infos_val["messages"]) > 5:
+                                        st.caption(f"... et {len(infos_val['messages']) - 5} autre(s) erreur(s)")
+                            else:
+                                st.info(f"✅ Structure XML validée contre le schéma Tableau")
+                            
                             nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                             
                             # Déterminer le format de sortie et préparer le fichier
@@ -412,6 +427,21 @@ def main():
                     try:
                         fichier = appliquer_modifications_filtres(xml_content, edited_filtres, filtres_source)
                         st.success(T["filtres_success"].format(nb_coches_filtres))
+                        
+                        # Valider le fichier
+                        infos_val = obtenir_infos_validation(fichier.read() if hasattr(fichier, 'read') else fichier)
+                        fichier.seek(0) if hasattr(fichier, 'seek') else None
+                        
+                        if not infos_val["valide"]:
+                            st.warning(f"⚠️ Validation: {infos_val['nb_erreurs']} erreur(s) détectée(s)")
+                            with st.expander("📋 Détails des erreurs"):
+                                for err in infos_val["messages"][:5]:  # Afficher max 5
+                                    st.code(err, language="text")
+                                if len(infos_val["messages"]) > 5:
+                                    st.caption(f"... et {len(infos_val['messages']) - 5} autre(s) erreur(s)")
+                        else:
+                            st.info(f"✅ Structure XML validée contre le schéma Tableau")
+                        
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                         
                         # Déterminer le format de sortie et préparer le fichier
@@ -538,6 +568,21 @@ def main():
                     try:
                         fichier_add, nb_add = ajouter_filtres_dashboards(xml_content, add_specs)
                         st.success(T["filtres_add_success"].format(nb_add))
+                        
+                        # Valider le fichier
+                        infos_val = obtenir_infos_validation(fichier_add.read() if hasattr(fichier_add, 'read') else fichier_add)
+                        fichier_add.seek(0) if hasattr(fichier_add, 'seek') else None
+                        
+                        if not infos_val["valide"]:
+                            st.warning(f"⚠️ Validation: {infos_val['nb_erreurs']} erreur(s) détectée(s)")
+                            with st.expander("📋 Détails des erreurs"):
+                                for err in infos_val["messages"][:5]:  # Afficher max 5
+                                    st.code(err, language="text")
+                                if len(infos_val["messages"]) > 5:
+                                    st.caption(f"... et {len(infos_val['messages']) - 5} autre(s) erreur(s)")
+                        else:
+                            st.info(f"✅ Structure XML validée contre le schéma Tableau")
+                        
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
                         
                         # Déterminer le format de sortie et préparer le fichier
@@ -689,6 +734,21 @@ def main():
                         st.session_state["filtres_source"]    = updated_source
                         st.session_state["df_reassociation"] = init_df_reassociation(updated_source)
                         st.success(T["filtres_reassoc_success"].format(nb_coches_reassoc))
+                        
+                        # Valider le fichier
+                        infos_val = obtenir_infos_validation(fichier_reassoc.read() if hasattr(fichier_reassoc, 'read') else fichier_reassoc)
+                        fichier_reassoc.seek(0) if hasattr(fichier_reassoc, 'seek') else None
+                        
+                        if not infos_val["valide"]:
+                            st.warning(f"⚠️ Validation: {infos_val['nb_erreurs']} erreur(s) détectée(s)")
+                            with st.expander("📋 Détails des erreurs"):
+                                for err in infos_val["messages"][:5]:  # Afficher max 5
+                                    st.code(err, language="text")
+                                if len(infos_val["messages"]) > 5:
+                                    st.caption(f"... et {len(infos_val['messages']) - 5} autre(s) erreur(s)")
+                        else:
+                            st.info(f"✅ Structure XML validée contre le schéma Tableau")
+                        
                         nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "")
                         
                         # Déterminer le format de sortie et préparer le fichier
@@ -934,6 +994,21 @@ def main():
                         s = "s" if nb_tab > 1 else ""
                         msgs.append(T["conn_ok_tables"].format(n=nb_tab, s=s))
                     st.success("✅ " + " · ".join(msgs) + ".")
+                    
+                    # Valider le fichier
+                    infos_val = obtenir_infos_validation(xml_modifie.read() if hasattr(xml_modifie, 'read') else xml_modifie)
+                    xml_modifie.seek(0) if hasattr(xml_modifie, 'seek') else None
+                    
+                    if not infos_val["valide"]:
+                        st.warning(f"⚠️ Validation: {infos_val['nb_erreurs']} erreur(s) détectée(s)")
+                        with st.expander("📋 Détails des erreurs"):
+                            for err in infos_val["messages"][:5]:  # Afficher max 5
+                                st.code(err, language="text")
+                            if len(infos_val["messages"]) > 5:
+                                st.caption(f"... et {len(infos_val['messages']) - 5} autre(s) erreur(s)")
+                    else:
+                        st.info(f"✅ Structure XML validée contre le schéma Tableau")
+                    
                     nom_base = xml_file.name.replace(".twbx", "").replace(".twb", "").replace(".tds", "")
                     
                     # Déterminer le format de sortie et préparer le fichier

@@ -2,6 +2,13 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 import zipfile
 import os
+import urllib.request
+
+try:
+    from lxml import etree
+    LXML_AVAILABLE = True
+except ImportError:
+    LXML_AVAILABLE = False
 
 # Préserver le préfixe 'user:' natif de Tableau lors de la re-sérialisation.
 # Sans ça, Python ET remplace xmlns:user par xmlns:ns0, ce qui casse les
@@ -105,3 +112,109 @@ def remballer_twbx(twb_content, ressources: dict,
     
     output.seek(0)
     return output
+
+
+# ═══════════════════════════════════════════════════════════════
+# VALIDATION XSD
+# ═══════════════════════════════════════════════════════════════
+
+XSD_URL = "https://raw.githubusercontent.com/tableau/tableau-document-schemas/main/schemas/2026_2/twb_2026.2.0.xsd"
+
+# Cache en mémoire pour éviter de re-télécharger à chaque validation
+_xsd_schema_cache = None
+
+
+def _charger_xsd_schema():
+    """
+    Charge le schéma XSD depuis GitHub (avec cache en mémoire).
+    Fallback sur le fichier local si le téléchargement échoue.
+    """
+    global _xsd_schema_cache
+    if _xsd_schema_cache is not None:
+        return _xsd_schema_cache, None
+
+    # 1. Essai depuis GitHub (raw)
+    try:
+        with urllib.request.urlopen(XSD_URL, timeout=5) as resp:
+            xsd_bytes = resp.read()
+        xsd_doc = etree.parse(BytesIO(xsd_bytes))
+        _xsd_schema_cache = etree.XMLSchema(xsd_doc)
+        return _xsd_schema_cache, None
+    except Exception:
+        pass
+
+    # 2. Fallback : chercher localement
+    chemins_locaux = [
+        r"c:\Users\Idir\Downloads\tableau-document-schemas-main\tableau-document-schemas-main\schemas\2026_2\twb_2026.2.0.xsd",
+        r".\schemas\twb_2026.2.0.xsd",
+        r"./schemas/twb_2026.2.0.xsd",
+    ]
+    for cp in chemins_locaux:
+        if os.path.exists(cp):
+            try:
+                xsd_doc = etree.parse(cp)
+                _xsd_schema_cache = etree.XMLSchema(xsd_doc)
+                return _xsd_schema_cache, None
+            except Exception:
+                pass
+
+    return None, "⚠️ Schéma XSD non disponible (GitHub inaccessible et aucun fichier local trouvé)"
+
+
+def valider_twb_contre_xsd(twb_content: bytes, chemin_xsd: str = None) -> tuple[bool, list]:
+    """
+    Valide le contenu TWB contre le schéma XSD Tableau (GitHub ou local).
+
+    Args:
+        twb_content: Contenu XML du .twb (bytes)
+        chemin_xsd: Chemin local vers un .xsd (optionnel, prioritaire si fourni)
+
+    Returns:
+        (est_valide, erreurs) où erreurs est une liste de messages d'erreur
+    """
+    if not LXML_AVAILABLE:
+        return True, ["⚠️ lxml non disponible - validation XSD ignorée"]
+
+    try:
+        # Si un chemin local explicite est fourni, l'utiliser directement
+        if chemin_xsd and os.path.exists(chemin_xsd):
+            xsd_doc = etree.parse(chemin_xsd)
+            schema = etree.XMLSchema(xsd_doc)
+        else:
+            schema, erreur_chargement = _charger_xsd_schema()
+            if schema is None:
+                return True, [erreur_chargement]
+
+        twb_doc = etree.parse(BytesIO(twb_content))
+        est_valide = schema.validate(twb_doc)
+
+        if not est_valide:
+            return False, [str(e) for e in schema.error_log]
+        return True, []
+
+    except etree.XMLSyntaxError as e:
+        return False, [f"Erreur syntaxe XML: {str(e)}"]
+    except Exception as e:
+        return False, [f"Erreur validation: {str(e)}"]
+
+
+def obtenir_infos_validation(twb_content: bytes) -> dict:
+    """
+    Retourne des infos de validation pour affichage dans l'UI.
+    
+    Returns:
+        {
+            "valide": bool,
+            "messages": [str],  # Messages d'erreur/avertissement
+            "nb_erreurs": int,
+            "resume": str  # Résumé court pour affichage
+        }
+    """
+    est_valide, erreurs = valider_twb_contre_xsd(twb_content)
+    
+    return {
+        "valide": est_valide,
+        "messages": erreurs,
+        "nb_erreurs": len(erreurs),
+        "resume": "✅ Validé" if est_valide else f"❌ {len(erreurs)} erreur(s)"
+    }
